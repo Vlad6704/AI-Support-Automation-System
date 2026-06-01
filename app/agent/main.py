@@ -7,11 +7,16 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph, add_messages
 from langgraph.graph.message import Messages
 from langgraph.types import Command, interrupt
+from langsmith import Client
+
+from IPython.display import Image, display
+
 from rich import print
 from dotenv import load_dotenv
 
-load_dotenv()
 
+load_dotenv()
+client = Client()
 
 Category = Literal["billing", "technical", "account", "unknown"]
 BillingSubcategory = Literal["invoice basic information", "invoice refund", "unknown"]
@@ -132,25 +137,29 @@ def _find_mock_invoice(invoice_id: int | None) -> MockInvoice | None:
 
 def node_classify_ticket(state: SupportState) -> SupportState:
     ticket = state.get("ticket")
-    model = init_chat_model(model="openai:gpt-5.4-mini")
-    messages: list[MessageLikeRepresentation] = [
-        SystemMessage(
-            "You are a ticket categorizer. Consider ticket and return the proper "
-            "category and billing subcategory. Billing subcategory must be "
-            "'invoice basic information' for invoice details like start/end dates, "
-            "'invoice refund' for refund requests, or 'unknown' when neither applies."
-        ),
-        HumanMessage(ticket),
-    ]
+    model = init_chat_model(model="openai:gpt-5.4-nano")
     structured_model = model.with_structured_output(CategoryOutput)
-    result: CategoryOutput = cast(CategoryOutput, structured_model.invoke(messages))
+    prompt = client.pull_prompt(
+        "node_classify_ticket",
+    )
+    # messages: list[MessageLikeRepresentation] = [
+    #     SystemMessage(
+    #         "You are a ticket categorizer. Consider ticket and return the proper "
+    #         "category and billing subcategory. Billing subcategory must be "
+    #         "'invoice basic information' for invoice details like start/end dates, "
+    #         "'invoice refund' for refund requests, or 'unknown' when neither applies."
+    #     ),
+    #     HumanMessage(ticket),
+    # ]
+    chain = prompt | structured_model
+    result: CategoryOutput = cast(CategoryOutput, chain.invoke({"ticket": ticket}))
     category = result.category
     return {
         "category": category,
         "billing_subcategory": result.billing_subcategory,
         "node_calls": {
             "node_classify_ticket": {
-                "messages": messages,
+                "messages": prompt,
                 "result": result.model_dump(),
             }
         },
@@ -161,7 +170,7 @@ def node_ask_fot_billing_data(state: SupportState) -> SupportState:
     ticket = state.get("ticket")
     category = state.get("category")
     invoice_id = state.get("billing_data", {}).get("invoice_id")
-    model = init_chat_model(model="openai:gpt-5.4-mini")
+    model = init_chat_model(model="openai:gpt-5.4-nano")
     billing_data_model = model.with_structured_output(BillingDataOutput)
     initial_extraction_messages: list[MessageLikeRepresentation] = [
         SystemMessage(
@@ -225,7 +234,7 @@ def node_get_draft_response(state: SupportState) -> SupportState:
     invoice_id = state.get("billing_data", {}).get("invoice_id")
     billing_context = state.get("billing_context")
 
-    model = init_chat_model(model="openai:gpt-5.4-mini")
+    model = init_chat_model(model="openai:gpt-5.4-nano")
     messages: list[MessageLikeRepresentation] = [
         SystemMessage(
             "You are a support worker. Consider ticket and category and write short draft for ticket response"
@@ -253,7 +262,7 @@ def node_get_invoice_date(state: SupportState) -> SupportState:
     ticket = state.get("ticket")
     invoice_id = state.get("billing_data", {}).get("invoice_id")
     invoice = _find_mock_invoice(invoice_id)
-    model = init_chat_model(model="openai:gpt-5.4-mini")
+    model = init_chat_model(model="openai:gpt-5.4-nano")
     messages: list[MessageLikeRepresentation] = [
         SystemMessage(
             "Decide which invoice date the user needs. Return 'start' if they ask "

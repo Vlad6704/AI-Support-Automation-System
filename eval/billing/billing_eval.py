@@ -1,0 +1,23 @@
+import asyncio
+from uuid import uuid4
+
+from langsmith import aevaluate
+
+from app.agent.main import graph
+
+
+async def target(inputs: dict) -> dict:
+    config = {"configurable": {"thread_id": f"billing_eval_id__{uuid4()}"}}
+    return await graph.ainvoke({"ticket": inputs["input"]}, config=config)
+
+
+async def main():
+    experiment_results = await aevaluate(
+        target,
+        data="end-to-end-billing-1",
+    )
+    print(experiment_results)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
