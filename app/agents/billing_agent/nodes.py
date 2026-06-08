@@ -1,33 +1,18 @@
-from typing import Annotated, Any, Literal, TypedDict, cast
-from pydantic import BaseModel
+from typing import Literal, TypedDict, cast
+
+from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 from langchain.messages import HumanMessage, SystemMessage
 from langchain_core.messages import MessageLikeRepresentation
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph import END, START, StateGraph, add_messages
-from langgraph.graph.message import Messages
-from langgraph.types import Command, interrupt
+from langchain_core.runnables import RunnableConfig
+from langgraph.types import interrupt
 from langsmith import Client
+from pydantic import BaseModel
 
-from IPython.display import Image, display
-
-from rich import print
-from dotenv import load_dotenv
-
+from app.agents.billing_agent.state import BillingSubcategory, Category, SupportState
 
 load_dotenv()
 client = Client()
-
-Category = Literal["billing", "technical", "account", "unknown"]
-BillingSubcategory = Literal["invoice basic information", "invoice refund", "unknown"]
-
-
-class NodeCall(TypedDict, total=False):
-    messages: list[MessageLikeRepresentation]
-    result: dict[str, Any]
-
-
-NodeCalls = dict[str, NodeCall]
 
 
 class CategoryOutput(BaseModel):
@@ -49,31 +34,6 @@ class BillingDataRequestOutput(BaseModel):
 
 class InvoiceDateOutput(BaseModel):
     date_type: Literal["start", "end", "both"]
-
-
-def _message_list(messages: Messages) -> list[MessageLikeRepresentation]:
-    if isinstance(messages, list):
-        return cast(list[MessageLikeRepresentation], messages)
-    return [messages]
-
-
-def merge_node_calls(left: NodeCalls | None, right: NodeCalls | None) -> NodeCalls:
-    merged = dict(left or {})
-    for node, call in (right or {}).items():
-        if node in merged and "messages" in call:
-            previous_messages = merged[node].get("messages", [])
-            merged[node]["messages"] = _message_list(
-                add_messages(previous_messages, call["messages"])
-            )
-            if "result" in call:
-                merged[node]["result"] = call["result"]
-        else:
-            merged[node] = call
-    return merged
-
-
-class BillingData(TypedDict, total=False):
-    invoice_id: int
 
 
 class MockInvoice(TypedDict):
@@ -109,22 +69,6 @@ MOCK_INVOICES: list[MockInvoice] = [
 ]
 
 
-# class Action(TypedDict, total=False):
-#     type: Literal["output_message"]
-#     message: str
-
-
-class SupportState(TypedDict, total=False):
-    ticket: str
-    category: Category
-    billing_subcategory: BillingSubcategory
-    risk_level: Literal["low", "high"]
-    node_calls: Annotated[NodeCalls, merge_node_calls]
-    draft_response: str
-    billing_data: BillingData
-    billing_context: str
-
-
 def _find_mock_invoice(invoice_id: int | None) -> MockInvoice | None:
     if invoice_id is None:
         return None
@@ -135,24 +79,17 @@ def _find_mock_invoice(invoice_id: int | None) -> MockInvoice | None:
     return None
 
 
-def node_classify_ticket(state: SupportState) -> SupportState:
+def node_classify_ticket(
+    state: SupportState, config: RunnableConfig | None = None
+) -> SupportState:
     ticket = state.get("ticket")
     model = init_chat_model(model="openai:gpt-5.4-nano")
     structured_model = model.with_structured_output(CategoryOutput)
-    prompt = client.pull_prompt(
-        "node_classify_ticket",
-    )
-    # messages: list[MessageLikeRepresentation] = [
-    #     SystemMessage(
-    #         "You are a ticket categorizer. Consider ticket and return the proper "
-    #         "category and billing subcategory. Billing subcategory must be "
-    #         "'invoice basic information' for invoice details like start/end dates, "
-    #         "'invoice refund' for refund requests, or 'unknown' when neither applies."
-    #     ),
-    #     HumanMessage(ticket),
-    # ]
+    prompt = client.pull_prompt("node_classify_ticket")
     chain = prompt | structured_model
-    result: CategoryOutput = cast(CategoryOutput, chain.invoke({"ticket": ticket}))
+    result: CategoryOutput = cast(
+        CategoryOutput, chain.invoke({"ticket": ticket}, config=config)
+    )
     category = result.category
     return {
         "category": category,
@@ -166,7 +103,9 @@ def node_classify_ticket(state: SupportState) -> SupportState:
     }
 
 
-def node_ask_fot_billing_data(state: SupportState) -> SupportState:
+def node_ask_fot_billing_data(
+    state: SupportState, config: RunnableConfig | None = None
+) -> SupportState:
     ticket = state.get("ticket")
     category = state.get("category")
     invoice_id = state.get("billing_data", {}).get("invoice_id")
@@ -180,7 +119,8 @@ def node_ask_fot_billing_data(state: SupportState) -> SupportState:
         HumanMessage(str(ticket)),
     ]
     billing_data = cast(
-        BillingDataOutput, billing_data_model.invoke(initial_extraction_messages)
+        BillingDataOutput,
+        billing_data_model.invoke(initial_extraction_messages, config=config),
     )
 
     if billing_data.invoice_id is not None:
@@ -204,14 +144,17 @@ def node_ask_fot_billing_data(state: SupportState) -> SupportState:
         ),
     ]
     structured_model = model.with_structured_output(BillingDataRequestOutput)
-    request_result = cast(BillingDataRequestOutput, structured_model.invoke(messages))
+    request_result = cast(
+        BillingDataRequestOutput, structured_model.invoke(messages, config=config)
+    )
     user_reply = interrupt(request_result.message)
     extraction_messages: list[MessageLikeRepresentation] = [
         SystemMessage("Extract the invoice id from the user's message."),
         HumanMessage(str(user_reply)),
     ]
     billing_data = cast(
-        BillingDataOutput, billing_data_model.invoke(extraction_messages)
+        BillingDataOutput,
+        billing_data_model.invoke(extraction_messages, config=config),
     )
     return {
         "billing_data": {"invoice_id": billing_data.invoice_id},
@@ -227,7 +170,9 @@ def node_ask_fot_billing_data(state: SupportState) -> SupportState:
     }
 
 
-def node_get_draft_response(state: SupportState) -> SupportState:
+def node_get_draft_response(
+    state: SupportState, config: RunnableConfig | None = None
+) -> SupportState:
     ticket = state.get("ticket")
     category = state.get("category")
     billing_subcategory = state.get("billing_subcategory")
@@ -237,7 +182,8 @@ def node_get_draft_response(state: SupportState) -> SupportState:
     model = init_chat_model(model="openai:gpt-5.4-nano")
     messages: list[MessageLikeRepresentation] = [
         SystemMessage(
-            "You are a support worker. Consider ticket and category and write short draft for ticket response"
+            "You are a support worker. Consider ticket and category and write short "
+            "draft for ticket response"
         ),
         HumanMessage(
             f"Ticket: {ticket}, Category: {category}, "
@@ -246,7 +192,7 @@ def node_get_draft_response(state: SupportState) -> SupportState:
         ),
     ]
     structured_model = model.with_structured_output(DraftOutput)
-    result = cast(DraftOutput, structured_model.invoke(messages))
+    result = cast(DraftOutput, structured_model.invoke(messages, config=config))
     return {
         "draft_response": result.draft,
         "node_calls": {
@@ -258,7 +204,9 @@ def node_get_draft_response(state: SupportState) -> SupportState:
     }
 
 
-def node_get_invoice_date(state: SupportState) -> SupportState:
+def node_get_invoice_date(
+    state: SupportState, config: RunnableConfig | None = None
+) -> SupportState:
     ticket = state.get("ticket")
     invoice_id = state.get("billing_data", {}).get("invoice_id")
     invoice = _find_mock_invoice(invoice_id)
@@ -272,7 +220,9 @@ def node_get_invoice_date(state: SupportState) -> SupportState:
         HumanMessage(f"Ticket: {ticket}"),
     ]
     structured_model = model.with_structured_output(InvoiceDateOutput)
-    date_result = cast(InvoiceDateOutput, structured_model.invoke(messages))
+    date_result = cast(
+        InvoiceDateOutput, structured_model.invoke(messages, config=config)
+    )
 
     if invoice is None:
         billing_context = f"No invoice found for invoice id {invoice_id}."
@@ -339,61 +289,3 @@ def node_check_refund(state: SupportState) -> SupportState:
             }
         },
     }
-
-
-def route_get_route(
-    state: SupportState,
-) -> Literal[
-    "ask_for_billing_data", "get_invoice_date", "check_refund", "get_draft_response"
-]:
-    category = state.get("category")
-
-    if category == "billing":
-        billing_data = state.get("billing_data", {})
-        if billing_data.get("invoice_id") is None:
-            return "ask_for_billing_data"
-        return route_after_billing_data(state)
-
-    return "get_draft_response"
-
-
-def route_after_billing_data(
-    state: SupportState,
-) -> Literal["get_invoice_date", "check_refund", "get_draft_response"]:
-    billing_subcategory = state.get("billing_subcategory")
-
-    if billing_subcategory == "invoice basic information":
-        return "get_invoice_date"
-    if billing_subcategory == "invoice refund":
-        return "check_refund"
-
-    return "get_draft_response"
-
-
-builder = StateGraph(SupportState)
-builder.add_node("classify_ticket", node_classify_ticket)
-builder.add_node("get_draft_response", node_get_draft_response)
-builder.add_node("ask_for_billing_data", node_ask_fot_billing_data)
-builder.add_node("get_invoice_date", node_get_invoice_date)
-builder.add_node("check_refund", node_check_refund)
-
-builder.add_edge(START, "classify_ticket")
-builder.add_conditional_edges("classify_ticket", route_get_route)
-builder.add_conditional_edges("ask_for_billing_data", route_after_billing_data)
-builder.add_edge("get_invoice_date", "get_draft_response")
-builder.add_edge("check_refund", "get_draft_response")
-builder.add_edge("get_draft_response", END)
-
-checkpointer = InMemorySaver()
-graph = builder.compile(checkpointer=checkpointer)
-
-
-if __name__ == "__main__":
-    config = {"configurable": {"thread_id": "ticket-1"}}
-    user_input = input("Input: ")
-    result = graph.invoke({"ticket": user_input}, config=config)
-    if result.get("__interrupt__") is not None:
-        print(result.get("__interrupt__")[0].value)
-        user_input = input("> ")
-        result = graph.invoke(Command(resume=user_input), config=config)
-    print(result)

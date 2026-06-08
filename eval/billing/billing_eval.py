@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from langsmith import aevaluate
 
-from app.agent.main import graph
+from app.agents.billing_agent.main import graph
 
 
 async def target(inputs: dict) -> dict:
