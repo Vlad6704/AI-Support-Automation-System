@@ -7,14 +7,17 @@ from langchain.messages import HumanMessage, SystemMessage
 from langchain_core.messages import MessageLikeRepresentation
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
+from langgraph.runtime import Runtime
 from pydantic import BaseModel
 
-from app.observability import invoke_graph_with_langfuse, shutdown_langfuse
-from app.repositories import (
-    get_customer_data_by_id,
-    get_first_ticket_history_data,
-    get_ticket_history_data_by_id,
+from app.agents.context import (
+    AgentContext,
+    create_database_agent_context,
+    create_stub_agent_context,
 )
+from app.observability import invoke_graph_with_langfuse, shutdown_langfuse
+
+from rich import print
 
 Intent = Literal["support", "not_support"]
 
@@ -92,12 +95,15 @@ def node_classify_intent(
     }
 
 
-def node_get_customer_data(state: MainAgentState) -> MainAgentState:
+def node_get_customer_data(
+    state: MainAgentState,
+    runtime: Runtime[AgentContext],
+) -> MainAgentState:
     customer_id = state.get("customer_id")
     if customer_id is None:
         return {}
 
-    customer = get_customer_data_by_id(customer_id)
+    customer = runtime.context.repository.get_customer_by_id(customer_id)
     if customer is None:
         return {}
 
@@ -164,7 +170,7 @@ def route_after_intent(
     return "friendly_message"
 
 
-builder = StateGraph(MainAgentState)
+builder = StateGraph(MainAgentState, context_schema=AgentContext)
 builder.add_node("classify_intent", node_classify_intent)
 builder.add_node("get_customer_data", node_get_customer_data)
 builder.add_node("draft_response", node_get_draft_response)
@@ -179,15 +185,20 @@ builder.add_edge("friendly_message", END)
 graph = builder.compile()
 
 
-def get_ticket_data(ticket_id: int | None = None) -> MainAgentState | None:
+def get_ticket_data(
+    ticket_id: int | None = None,
+    *,
+    context: AgentContext,
+) -> MainAgentState | None:
     if ticket_id is None:
-        return get_first_ticket_history_data()
-    return get_ticket_history_data_by_id(ticket_id)
+        return context.repository.get_first_ticket()
+    return context.repository.get_ticket_by_id(ticket_id)
 
 
 if __name__ == "__main__":
     ticket_id = int(argv[1]) if len(argv) > 1 else None
-    ticket_data = get_ticket_data(ticket_id)
+    context = create_stub_agent_context()
+    ticket_data = get_ticket_data(ticket_id, context=context)
     if ticket_data is None:
         if ticket_id is None:
             raise SystemExit("No ticket_history rows found.")
@@ -201,6 +212,7 @@ if __name__ == "__main__":
             session_id=f"ticket-{ticket_data['id']}",
             user_id=str(ticket_data["customer_id"]),
             tags=("main-agent", "support"),
+            context=context,
         )
         print(result)
     finally:

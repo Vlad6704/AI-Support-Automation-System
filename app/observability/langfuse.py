@@ -63,6 +63,7 @@ def invoke_graph_with_langfuse(
     user_id: str | None = None,
     tags: Iterable[str] = (),
     metadata: Mapping[str, Any] | None = None,
+    context: Any = None,
 ) -> T:
     langfuse = get_client()
     langfuse_config = merge_langfuse_callbacks(config)
@@ -82,7 +83,11 @@ def invoke_graph_with_langfuse(
             user_id=user_id,
             tags=list(tags),
         ):
-            result: T = graph.invoke(input_data, config=langfuse_config)
+            result: T = graph.invoke(
+                input_data,
+                config=langfuse_config,
+                context=context,
+            )
 
         span.update(output=_trace_output(result))
         return result

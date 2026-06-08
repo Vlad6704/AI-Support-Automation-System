@@ -1,19 +1,17 @@
-from app.repositories.agent_data_repository import (
-    select_customer_context_by_id,
-    select_deployments_by_time_window,
-    select_incidents_for_affected_service,
+from app.repositories.agent_repository import DatabaseAgentRepository
+from app.repositories.agent_repository_protocols import (
+    AgentRepository,
+    CustomerData,
+    InvoiceData,
+    TicketHistoryData,
 )
-from app.repositories.customer_repository import get_customer_data_by_id
-from app.repositories.ticket_history_repository import (
-    get_first_ticket_history_data,
-    get_ticket_history_data_by_id,
-)
+from app.repositories.agent_repository_stubs import StubAgentRepository
 
 __all__ = [
-    "get_first_ticket_history_data",
-    "get_customer_data_by_id",
-    "get_ticket_history_data_by_id",
-    "select_customer_context_by_id",
-    "select_deployments_by_time_window",
-    "select_incidents_for_affected_service",
+    "AgentRepository",
+    "CustomerData",
+    "DatabaseAgentRepository",
+    "InvoiceData",
+    "StubAgentRepository",
+    "TicketHistoryData",
 ]

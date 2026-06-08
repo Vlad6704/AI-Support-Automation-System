@@ -1,4 +1,4 @@
-from typing import Literal, TypedDict, cast
+from typing import Literal, cast
 
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
@@ -6,10 +6,12 @@ from langchain.messages import HumanMessage, SystemMessage
 from langchain_core.messages import MessageLikeRepresentation
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import interrupt
+from langgraph.runtime import Runtime
 from langsmith import Client
 from pydantic import BaseModel
 
 from app.agents.billing_agent.state import BillingSubcategory, Category, SupportState
+from app.agents.context import AgentContext
 
 load_dotenv()
 client = Client()
@@ -34,49 +36,6 @@ class BillingDataRequestOutput(BaseModel):
 
 class InvoiceDateOutput(BaseModel):
     date_type: Literal["start", "end", "both"]
-
-
-class MockInvoice(TypedDict):
-    invoice_id: int
-    start_date: str
-    end_date: str
-    amount: str
-    refundable: bool
-
-
-MOCK_INVOICES: list[MockInvoice] = [
-    {
-        "invoice_id": 1001,
-        "start_date": "2026-01-01",
-        "end_date": "2026-01-31",
-        "amount": "$49.00",
-        "refundable": True,
-    },
-    {
-        "invoice_id": 1002,
-        "start_date": "2026-02-01",
-        "end_date": "2026-02-28",
-        "amount": "$49.00",
-        "refundable": False,
-    },
-    {
-        "invoice_id": 1003,
-        "start_date": "2026-03-01",
-        "end_date": "2026-03-31",
-        "amount": "$79.00",
-        "refundable": True,
-    },
-]
-
-
-def _find_mock_invoice(invoice_id: int | None) -> MockInvoice | None:
-    if invoice_id is None:
-        return None
-
-    for invoice in MOCK_INVOICES:
-        if invoice["invoice_id"] == invoice_id:
-            return invoice
-    return None
 
 
 def node_classify_ticket(
@@ -205,11 +164,17 @@ def node_get_draft_response(
 
 
 def node_get_invoice_date(
-    state: SupportState, config: RunnableConfig | None = None
+    state: SupportState,
+    runtime: Runtime[AgentContext],
+    config: RunnableConfig | None = None,
 ) -> SupportState:
     ticket = state.get("ticket")
     invoice_id = state.get("billing_data", {}).get("invoice_id")
-    invoice = _find_mock_invoice(invoice_id)
+    invoice = (
+        runtime.context.repository.get_invoice_by_id(invoice_id)
+        if invoice_id is not None
+        else None
+    )
     model = init_chat_model(model="openai:gpt-5.4-nano")
     messages: list[MessageLikeRepresentation] = [
         SystemMessage(
@@ -252,10 +217,17 @@ def node_get_invoice_date(
     }
 
 
-def node_check_refund(state: SupportState) -> SupportState:
+def node_check_refund(
+    state: SupportState,
+    runtime: Runtime[AgentContext],
+) -> SupportState:
     billing_subcategory = state.get("billing_subcategory")
     invoice_id = state.get("billing_data", {}).get("invoice_id")
-    invoice = _find_mock_invoice(invoice_id)
+    invoice = (
+        runtime.context.repository.get_invoice_by_id(invoice_id)
+        if invoice_id is not None
+        else None
+    )
 
     if billing_subcategory != "invoice refund":
         billing_context = (
@@ -267,12 +239,12 @@ def node_check_refund(state: SupportState) -> SupportState:
         )
     elif invoice["refundable"]:
         billing_context = (
-            f"Refund check passed: invoice {invoice_id} matches a invoice "
+            f"Refund check passed: invoice {invoice_id} matches an invoice "
             f"and is refundable for {invoice['amount']}."
         )
     else:
         billing_context = (
-            f"Refund check failed: invoice {invoice_id} matches a invoice "
+            f"Refund check failed: invoice {invoice_id} matches an invoice "
             "but is not refundable."
         )
 

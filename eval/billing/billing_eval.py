@@ -3,12 +3,17 @@ from uuid import uuid4
 
 from langsmith import aevaluate
 
+from app.agents.context import create_stub_agent_context
 from app.agents.billing_agent.main import graph
 
 
 async def target(inputs: dict) -> dict:
     config = {"configurable": {"thread_id": f"billing_eval_id__{uuid4()}"}}
-    return await graph.ainvoke({"ticket": inputs["input"]}, config=config)
+    return await graph.ainvoke(
+        {"ticket": inputs["input"]},
+        config=config,
+        context=create_stub_agent_context(),
+    )
 
 
 async def main():

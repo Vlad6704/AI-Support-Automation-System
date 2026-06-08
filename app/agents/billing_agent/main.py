@@ -14,12 +14,13 @@ from app.agents.billing_agent.nodes import (
     node_get_invoice_date,
 )
 from app.agents.billing_agent.state import SupportState
+from app.agents.context import AgentContext, create_stub_agent_context
 from app.observability import invoke_graph_with_langfuse
 
 from rich import print
 
 
-builder = StateGraph(SupportState)
+builder = StateGraph(SupportState, context_schema=AgentContext)
 builder.add_node("classify_ticket", node_classify_ticket)
 builder.add_node("get_draft_response", node_get_draft_response)
 builder.add_node("ask_for_billing_data", node_ask_fot_billing_data)
@@ -42,6 +43,7 @@ def run_billing_agent(
     *,
     thread_id: str = "ticket-1",
     user_id: str | None = None,
+    context: AgentContext | None = None,
 ) -> SupportState:
     config = {"configurable": {"thread_id": thread_id}}
     return invoke_graph_with_langfuse(
@@ -52,14 +54,16 @@ def run_billing_agent(
         session_id=thread_id,
         user_id=user_id,
         tags=("billing", "support-agent"),
+        context=context or create_stub_agent_context(),
     )
 
 
 if __name__ == "__main__":
     thread_id = "ticket-1"
+    context = create_stub_agent_context()
     config = {"configurable": {"thread_id": thread_id}}
     user_input = input("Input: ")
-    result = run_billing_agent(user_input, thread_id=thread_id)
+    result = run_billing_agent(user_input, thread_id=thread_id, context=context)
     if result.get("__interrupt__") is not None:
         print(result.get("__interrupt__")[0].value)
         user_input = input("> ")
@@ -71,5 +75,6 @@ if __name__ == "__main__":
             session_id=thread_id,
             tags=("billing", "support-agent", "resume"),
             metadata={"resume": True},
+            context=context,
         )
     print(result)
