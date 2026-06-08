@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Protocol, TypedDict
+from typing import Protocol, TypeAlias, TypedDict
 
 from app.enums import AffectedService
 
@@ -35,6 +35,18 @@ class InvoiceData(TypedDict):
     refundable: bool
 
 
+SerializedValue: TypeAlias = str | int | float | bool | None
+SerializedRow: TypeAlias = dict[str, SerializedValue]
+
+
+class CustomerContextData(TypedDict):
+    customer: SerializedRow | None
+    subscriptions: list[SerializedRow]
+    api_usage_logs: list[SerializedRow]
+    ticket_history: list[SerializedRow]
+    webhook_delivery_logs: list[SerializedRow]
+
+
 class AgentRepository(Protocol):
     def get_customer_by_id(self, customer_id: int) -> CustomerData | None: ...
 
@@ -44,16 +56,16 @@ class AgentRepository(Protocol):
 
     def get_invoice_by_id(self, invoice_id: int) -> InvoiceData | None: ...
 
-    def get_customer_context(self, customer_id: int) -> dict[str, Any]: ...
+    def get_customer_context(self, customer_id: int) -> CustomerContextData: ...
 
     def get_incidents(
         self,
         affected_service: AffectedService,
         limit: int = 20,
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[SerializedRow]: ...
 
     def get_deployments(
         self,
         deployed_from: datetime | None = None,
         deployed_to: datetime | None = None,
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[SerializedRow]: ...

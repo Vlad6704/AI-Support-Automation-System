@@ -16,8 +16,10 @@ from app.models import (
     WebhookDeliveryLog,
 )
 from app.repositories.agent_repository_protocols import (
+    CustomerContextData,
     CustomerData,
     InvoiceData,
+    SerializedRow,
     TicketHistoryData,
 )
 from app.repositories.utils.serialization import model_to_dict
@@ -55,7 +57,7 @@ def _all_for_customer(
     model: Any,
     customer_id: int,
     limit: int = 50,
-) -> list[dict[str, Any]]:
+) -> list[SerializedRow]:
     rows = db.scalars(
         select(model)
         .where(model.customer_id == customer_id)
@@ -95,7 +97,7 @@ class DatabaseAgentRepository:
     def get_invoice_by_id(self, invoice_id: int) -> InvoiceData | None:
         return None
 
-    def get_customer_context(self, customer_id: int) -> dict[str, Any]:
+    def get_customer_context(self, customer_id: int) -> CustomerContextData:
         db = SessionLocal()
         try:
             customer = db.get(Customer, customer_id)
@@ -117,7 +119,7 @@ class DatabaseAgentRepository:
         self,
         affected_service: AffectedService,
         limit: int = 20,
-    ) -> list[dict[str, Any]]:
+    ) -> list[SerializedRow]:
         db = SessionLocal()
         try:
             safe_limit = max(1, min(limit, 20))
@@ -135,7 +137,7 @@ class DatabaseAgentRepository:
         self,
         deployed_from: datetime | None = None,
         deployed_to: datetime | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[SerializedRow]:
         db = SessionLocal()
         try:
             statement = select(Deployment)

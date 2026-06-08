@@ -15,11 +15,14 @@ from app.agents.context import (
     create_database_agent_context,
     create_stub_agent_context,
 )
+from app.agents.webhook_agent import graph as webhook_agent_graph
 from app.observability import invoke_graph_with_langfuse, shutdown_langfuse
+from app.repositories import CustomerContextData
 
 from rich import print
 
 Intent = Literal["support", "not_support"]
+SupportCategory = Literal["webhook", "other"]
 
 
 def merge_node_calls(
@@ -50,6 +53,7 @@ class MainAgentState(TypedDict, total=False):
     updated_by: str | None
     resolution_summery: str | None
     customer: CustomerData
+    customer_context: CustomerContextData
     intent: Intent
     intent_reason: str
     draft_response: str
@@ -58,6 +62,7 @@ class MainAgentState(TypedDict, total=False):
 
 class IntentOutput(BaseModel):
     intent: Intent
+    category: SupportCategory
     reason: str
 
 
@@ -76,7 +81,10 @@ def node_classify_intent(
             "Return intent='support' for product issues, account questions, billing, "
             "webhooks, incidents, access problems, bugs, or how-to requests. "
             "Return intent='not_support' for unrelated spam, sales outreach, or casual "
-            "messages that do not require support action."
+            "messages that do not require support action. "
+            "Return category='webhook' when the request concerns webhook delivery, "
+            "configuration, events, endpoints, retries, or failures. Return "
+            "category='other' for all other requests."
         ),
         HumanMessage(
             f"Title: {state.get('title')}\n\nDescription: {state.get('description')}"
@@ -85,6 +93,7 @@ def node_classify_intent(
     result = cast(IntentOutput, structured_model.invoke(messages, config=config))
     return {
         "intent": result.intent,
+        "category": result.category,
         "intent_reason": result.reason,
         "node_calls": {
             "node_classify_intent": {
@@ -126,7 +135,8 @@ def node_get_draft_response(
             f"Description: {state.get('description')}\n\n"
             f"Intent: {state.get('intent')}\n"
             f"Intent reason: {state.get('intent_reason')}\n"
-            f"Customer data: {state.get('customer')}"
+            f"Customer data: {state.get('customer')}\n"
+            f"Customer context: {state.get('customer_context')}"
         ),
     ]
     result = cast(DraftOutput, structured_model.invoke(messages, config=config))
@@ -164,7 +174,12 @@ def node_return_friendly_message(state: MainAgentState) -> MainAgentState:
 
 def route_after_intent(
     state: MainAgentState,
-) -> Literal["get_customer_data", "friendly_message"]:
+) -> Literal["webhook_agent", "get_customer_data", "friendly_message"]:
+    if state.get("intent") == "support" and state.get("category") in {
+        "webhook",
+        "webhooks",
+    }:
+        return "webhook_agent"
     if state.get("intent") == "support":
         return "get_customer_data"
     return "friendly_message"
@@ -172,12 +187,14 @@ def route_after_intent(
 
 builder = StateGraph(MainAgentState, context_schema=AgentContext)
 builder.add_node("classify_intent", node_classify_intent)
+builder.add_node("webhook_agent", webhook_agent_graph)
 builder.add_node("get_customer_data", node_get_customer_data)
 builder.add_node("draft_response", node_get_draft_response)
 builder.add_node("friendly_message", node_return_friendly_message)
 
 builder.add_edge(START, "classify_intent")
 builder.add_conditional_edges("classify_intent", route_after_intent)
+builder.add_edge("webhook_agent", "draft_response")
 builder.add_edge("get_customer_data", "draft_response")
 builder.add_edge("draft_response", END)
 builder.add_edge("friendly_message", END)

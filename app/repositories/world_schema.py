@@ -1,7 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.enums import AffectedService, WebhookDeliveryStatus
 from app.models import (
@@ -64,6 +64,14 @@ class IncidentData(WorldRow):
     customer_impact: str | None
 
 
+class InvoiceData(WorldRow):
+    invoice_id: int
+    start_date: str
+    end_date: str
+    amount: str
+    refundable: bool
+
+
 class SubscriptionData(WorldRow):
     id: int
     customer_id: int
@@ -119,6 +127,7 @@ class WorldData(BaseModel):
     customers: list[CustomerData]
     deployments: list[DeploymentData]
     incidents: list[IncidentData]
+    invoices: list[InvoiceData] = Field(default_factory=list)
     subscriptions: list[SubscriptionData]
     support_team_members: list[SupportTeamMemberData]
     ticket_history: list[TicketHistoryData]
