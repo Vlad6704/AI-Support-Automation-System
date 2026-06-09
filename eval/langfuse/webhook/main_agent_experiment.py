@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 from uuid import uuid4
 
@@ -15,7 +15,21 @@ DATASET_NAME = "case_1"
 EXPERIMENT_NAME = "main-agent-webhook"
 
 
-async def run_main_agent(*, item: Any, **_: Any) -> dict[str, Any]:
+async def run_main_agent(*, item: Any, **_: Any) -> dict[str, Any] | list[dict[str, Any]]:
+    inputs = item.input
+    if isinstance(inputs, Mapping):
+        return await _invoke_main_agent(inputs)
+    if isinstance(inputs, Sequence) and not isinstance(inputs, (str, bytes)):
+        if not all(isinstance(input_, Mapping) for input_ in inputs):
+            raise TypeError("Each dataset item input must be an object.")
+        return [await _invoke_main_agent(input_) for input_ in inputs]
+    raise TypeError("Dataset item input must be an object or an array of objects.")
+
+
+async def _invoke_main_agent(input_: Any) -> dict[str, Any]:
+    if not isinstance(input_, Mapping):
+        raise TypeError("Each dataset item input must be an object.")
+
     config = merge_langfuse_callbacks(
         {
             "configurable": {
@@ -24,46 +38,10 @@ async def run_main_agent(*, item: Any, **_: Any) -> dict[str, Any]:
         }
     )
     return await graph.ainvoke(
-        item.input,
+        dict(input_),
         config=config,
         context=create_stub_agent_context(),
     )
-
-
-def webhook_route_evaluator(*, output: dict[str, Any], **_: Any) -> dict[str, Any]:
-    customer_context = output.get("customer_context")
-    passed = (
-        output.get("intent") == "support"
-        and output.get("category") in {"webhook", "webhooks"}
-        and isinstance(customer_context, dict)
-        and bool(customer_context)
-    )
-    return {
-        "name": "webhook_route_correct",
-        "value": passed,
-        "data_type": "BOOLEAN",
-        "comment": "Checks webhook classification and customer-context retrieval.",
-    }
-
-
-def draft_response_evaluator(
-    *,
-    output: dict[str, Any],
-    expected_output: dict[str, Any] | None = None,
-    **_: Any,
-) -> dict[str, Any]:
-    draft = output.get("draft_response")
-    expected_draft = (expected_output or {}).get("draft_response")
-    passed = isinstance(draft, str) and bool(draft.strip())
-    return {
-        "name": "draft_response_present",
-        "value": passed,
-        "data_type": "BOOLEAN",
-        "comment": (
-            "Checks that the main agent produced a non-empty draft response. "
-            f"Reference draft available: {isinstance(expected_draft, str)}."
-        ),
-    }
 
 
 def run_experiment(
@@ -99,7 +77,6 @@ def run_experiment(
         run_name=_optional_string(_config_value(config, "runName", "run_name")),
         description="Evaluate the main agent on webhook support tickets.",
         task=run_main_agent,
-        # evaluators=[webhook_route_evaluator, draft_response_evaluator],
         max_concurrency=int(
             _config_value(config, "maxConcurrency", "max_concurrency", default=5)
         ),
