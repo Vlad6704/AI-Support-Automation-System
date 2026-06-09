@@ -4,6 +4,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.db import SessionLocal
+from app.repositories.agent_repository_stubs import StubAgentRepository
 from app.repositories.world_schema import (
     WORLD_MODEL_SCHEMAS,
     load_world,
@@ -33,6 +34,24 @@ class WorldSchemaTests(unittest.TestCase):
                         world_schema.model_validate(row)
         finally:
             db.close()
+
+    def test_webhook_context_contains_endpoints_and_event_payloads(self) -> None:
+        context = StubAgentRepository().get_customer_context(2)
+
+        self.assertEqual(
+            context["webhook_endpoints"][0]["events"],
+            ["order.created", "payment.failed"],
+        )
+        self.assertEqual(
+            context["api_usage_logs"][0]["payload"]["payment_id"],
+            "pay_2002",
+        )
+        self.assertTrue(
+            all(
+                log["webhook_endpoint_id"] == 2
+                for log in context["webhook_delivery_logs"]
+            )
+        )
 
 
 if __name__ == "__main__":

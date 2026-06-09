@@ -1,4 +1,6 @@
 from datetime import datetime
+from pathlib import Path
+from sqlite3 import connect
 from sys import argv
 from typing import Annotated, Literal, TypedDict, cast
 
@@ -7,6 +9,7 @@ from langchain.messages import HumanMessage, SystemMessage
 from langchain_core.messages import MessageLikeRepresentation
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.runtime import Runtime
 from pydantic import BaseModel
 
@@ -199,7 +202,10 @@ builder.add_edge("get_customer_data", "draft_response")
 builder.add_edge("draft_response", END)
 builder.add_edge("friendly_message", END)
 
-graph = builder.compile()
+CHECKPOINT_DB_PATH = Path(__file__).resolve().parents[2] / "checkpoints.db"
+checkpoint_connection = connect(CHECKPOINT_DB_PATH, check_same_thread=False)
+checkpointer = SqliteSaver(checkpoint_connection)
+graph = builder.compile(checkpointer=checkpointer)
 
 
 def get_ticket_data(
@@ -222,11 +228,13 @@ if __name__ == "__main__":
         raise SystemExit(f"No ticket_history row found for id {ticket_id}.")
 
     try:
+        thread_id = f"ticket-{ticket_data['id']}"
         result = invoke_graph_with_langfuse(
             graph,
             ticket_data,
             trace_name="main-agent",
-            session_id=f"ticket-{ticket_data['id']}",
+            config={"configurable": {"thread_id": thread_id}},
+            session_id=thread_id,
             user_id=str(ticket_data["customer_id"]),
             tags=("main-agent", "support"),
             context=context,

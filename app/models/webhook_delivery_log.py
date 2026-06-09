@@ -17,7 +17,10 @@ class WebhookDeliveryLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
     event_type: Mapped[str] = mapped_column(String(100), index=True)
-    endpoint_url: Mapped[str] = mapped_column(String(500))
+    webhook_endpoint_id: Mapped[int] = mapped_column(
+        ForeignKey("webhook_endpoints.id"),
+        index=True,
+    )
     status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     delivery_status: Mapped[WebhookDeliveryStatus] = mapped_column(
         Enum(

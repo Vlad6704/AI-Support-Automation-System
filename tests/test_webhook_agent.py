@@ -2,13 +2,18 @@ import unittest
 from unittest.mock import Mock
 
 from langgraph.runtime import Runtime
+from langgraph.checkpoint.sqlite import SqliteSaver
 
 from app.agents.context import AgentContext
-from app.agents.main_agent import route_after_intent
+from app.agents.main_agent import CHECKPOINT_DB_PATH, graph, route_after_intent
 from app.agents.webhook_agent.nodes import node_get_customer_context
 
 
 class WebhookAgentTests(unittest.TestCase):
+    def test_main_agent_uses_sqlite_checkpointer(self) -> None:
+        self.assertIsInstance(graph.checkpointer, SqliteSaver)
+        self.assertEqual(CHECKPOINT_DB_PATH.name, "checkpoints.db")
+
     def test_support_webhook_routes_to_webhook_agent(self) -> None:
         route = route_after_intent({"intent": "support", "category": "webhooks"})
         self.assertEqual(route, "webhook_agent")

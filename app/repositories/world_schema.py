@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,6 +14,7 @@ from app.models import (
     SupportTeamMember,
     TicketHistory,
     WebhookDeliveryLog,
+    WebhookEndpoint,
 )
 
 
@@ -23,11 +25,8 @@ class WorldRow(BaseModel):
 class ApiUsageLogData(WorldRow):
     id: int
     customer_id: int
-    endpoint: str
-    method: str
-    status_code: int
-    latency_ms: int
-    error_code: str | None
+    event_type: str
+    payload: dict[str, Any]
     created_at: datetime
 
 
@@ -111,13 +110,22 @@ class WebhookDeliveryLogData(WorldRow):
     id: int
     customer_id: int
     event_type: str
-    endpoint_url: str
+    webhook_endpoint_id: int
     status_code: int | None
     delivery_status: WebhookDeliveryStatus
     attempt_count: int
     error_message: str | None
     created_at: datetime
     last_attempt_at: datetime | None
+
+
+class WebhookEndpointData(WorldRow):
+    id: int
+    customer_id: int
+    url: str
+    events: list[str]
+    status: str
+    created_at: datetime
 
 
 class WorldData(BaseModel):
@@ -132,6 +140,7 @@ class WorldData(BaseModel):
     support_team_members: list[SupportTeamMemberData]
     ticket_history: list[TicketHistoryData]
     webhook_delivery_logs: list[WebhookDeliveryLogData]
+    webhook_endpoints: list[WebhookEndpointData]
 
 
 WORLD_MODEL_SCHEMAS = {
@@ -143,6 +152,7 @@ WORLD_MODEL_SCHEMAS = {
     SupportTeamMember: SupportTeamMemberData,
     TicketHistory: TicketHistoryData,
     WebhookDeliveryLog: WebhookDeliveryLogData,
+    WebhookEndpoint: WebhookEndpointData,
 }
 
 

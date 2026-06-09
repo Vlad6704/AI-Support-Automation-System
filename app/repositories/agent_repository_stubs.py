@@ -78,6 +78,9 @@ class StubAgentRepository:
             "webhook_delivery_logs": self._latest_for_customer(
                 self.world.webhook_delivery_logs, customer_id
             ),
+            "webhook_endpoints": self._latest_for_customer(
+                self.world.webhook_endpoints, customer_id
+            ),
         }
 
     def get_incidents(

@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from typing import Any
 
 from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -11,11 +10,12 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class ApiUsageLog(Base):
-    __tablename__ = "api_usage_logs"
+class WebhookEndpoint(Base):
+    __tablename__ = "webhook_endpoints"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
-    event_type: Mapped[str] = mapped_column(String(100), index=True)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON)
+    url: Mapped[str] = mapped_column(String(500))
+    events: Mapped[list[str]] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(50), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

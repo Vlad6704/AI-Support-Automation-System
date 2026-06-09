@@ -14,6 +14,7 @@ from app.models import (
     Subscription,
     TicketHistory,
     WebhookDeliveryLog,
+    WebhookEndpoint,
 )
 from app.repositories.agent_repository_protocols import (
     CustomerContextData,
@@ -109,6 +110,11 @@ class DatabaseAgentRepository:
                 "webhook_delivery_logs": _all_for_customer(
                     db,
                     WebhookDeliveryLog,
+                    customer_id,
+                ),
+                "webhook_endpoints": _all_for_customer(
+                    db,
+                    WebhookEndpoint,
                     customer_id,
                 ),
             }

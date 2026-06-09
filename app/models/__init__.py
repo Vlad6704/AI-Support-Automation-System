@@ -6,6 +6,7 @@ from app.models.subscription import Subscription
 from app.models.support_team_member import SupportTeamMember
 from app.models.ticket_history import TicketHistory
 from app.models.webhook_delivery_log import WebhookDeliveryLog
+from app.models.webhook_endpoint import WebhookEndpoint
 
 __all__ = [
     "ApiUsageLog",
@@ -16,4 +17,5 @@ __all__ = [
     "SupportTeamMember",
     "TicketHistory",
     "WebhookDeliveryLog",
+    "WebhookEndpoint",
 ]

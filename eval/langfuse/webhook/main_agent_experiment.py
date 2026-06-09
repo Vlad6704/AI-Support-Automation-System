@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping, Sequence
 from typing import Any
 from uuid import uuid4
@@ -37,7 +38,8 @@ async def _invoke_main_agent(input_: Any) -> dict[str, Any]:
             }
         }
     )
-    return await graph.ainvoke(
+    return await asyncio.to_thread(
+        graph.invoke,
         dict(input_),
         config=config,
         context=create_stub_agent_context(),
