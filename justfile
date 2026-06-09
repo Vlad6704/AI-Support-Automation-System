@@ -1,0 +1,13 @@
+set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
+
+server:
+    uv run -m main
+
+agent ticket="":
+    uv run -m app.agents.main_agent {{ticket}}
+
+eval:
+    uv run -m eval.langfuse.webhook.main_agent_experiment
+
+tests:
+    uv run -m unittest discover -s tests
