@@ -48,6 +48,7 @@ def _ticket_to_data(ticket: TicketHistory) -> TicketHistoryData:
         "created_at": ticket.created_at,
         "updated_at": ticket.updated_at,
         "status": ticket.status,
+        "supportability": ticket.supportability,
         "category": ticket.category,
         "updated_by": ticket.updated_by,
         "resolution_summery": ticket.resolution_summery,

@@ -17,6 +17,7 @@ from app.agents.context import (
     AgentContext,
 )
 from app.agents.webhook_agent import graph as webhook_agent_graph
+from app.enums import TicketStatus
 from app.repositories import CustomerContextData
 
 Intent = Literal["support", "not_support"]
@@ -46,7 +47,7 @@ class MainAgentState(TypedDict, total=False):
     description: str
     created_at: datetime
     updated_at: datetime
-    status: str
+    status: TicketStatus
     category: str | None
     updated_by: str | None
     resolution_summery: str | None

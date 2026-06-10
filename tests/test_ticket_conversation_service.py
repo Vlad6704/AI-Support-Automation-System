@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base
-from app.enums import MessageSource
+from app.enums import MessageSource, TicketStatus
 from app.models import Customer, Message, TicketHistory
 from app.repositories import (
     DatabaseTicketConversationRepository,
@@ -45,7 +45,7 @@ class TicketConversationServiceTests(unittest.TestCase):
                     customer_id=1,
                     title="Webhook issue",
                     description="Please investigate.",
-                    status="open",
+                    status=TicketStatus.OPEN,
                 )
             )
             db.commit()

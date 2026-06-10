@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.api.providers import get_ticket_conversation_service
-from app.enums import MessageSource
+from app.enums import MessageSource, TicketStatus
 from app.main import app
 from app.models import Customer, Message, TicketHistory
 from app.repositories import DatabaseTicketConversationRepository
@@ -40,7 +40,7 @@ class ConversationApiTests(unittest.TestCase):
                     customer_id=1,
                     title="Webhook payload is incorrect",
                     description="Please investigate.",
-                    status="open",
+                    status=TicketStatus.OPEN,
                 )
             )
             db.add(

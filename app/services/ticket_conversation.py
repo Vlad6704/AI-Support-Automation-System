@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import logging
 
-from app.enums import MessageSource
+from app.enums import MessageSource, TicketStatus
 from app.models import Customer, Message, TicketHistory
 from app.repositories import TicketConversationRepository
 from app.services.exceptions import (
@@ -66,7 +66,7 @@ class TicketConversationService:
             customer_id=customer_id,
             title=title,
             description=description,
-            status="open",
+            status=TicketStatus.OPEN,
             updated_by="customer",
             initial_message_source=MessageSource.USER,
         )

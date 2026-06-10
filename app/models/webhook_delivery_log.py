@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
 from app.enums import WebhookDeliveryStatus
+from app.enums.utils import enum_values
 
 
 def utc_now() -> datetime:
@@ -25,7 +26,7 @@ class WebhookDeliveryLog(Base):
     delivery_status: Mapped[WebhookDeliveryStatus] = mapped_column(
         Enum(
             WebhookDeliveryStatus,
-            values_callable=lambda enum: [item.value for item in enum],
+            values_callable=enum_values,
             native_enum=False,
         ),
         index=True,

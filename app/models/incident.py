@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
 from app.enums import AffectedService
+from app.enums.utils import enum_values
 
 
 def utc_now() -> datetime:
@@ -19,7 +20,7 @@ class Incident(Base):
     affected_service: Mapped[AffectedService] = mapped_column(
         Enum(
             AffectedService,
-            values_callable=lambda enum: [item.value for item in enum],
+            values_callable=enum_values,
             native_enum=False,
         ),
         index=True,

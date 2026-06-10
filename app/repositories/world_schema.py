@@ -4,7 +4,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.enums import AffectedService, MessageSource, WebhookDeliveryStatus
+from app.enums import (
+    AffectedService,
+    MessageSource,
+    TicketStatus,
+    TicketSupportability,
+    WebhookDeliveryStatus,
+)
 from app.models import (
     ApiUsageLog,
     Customer,
@@ -111,7 +117,8 @@ class TicketHistoryData(WorldRow):
     description: str
     created_at: datetime
     updated_at: datetime
-    status: str
+    status: TicketStatus
+    supportability: TicketSupportability
     category: str | None
     updated_by: str | None
     resolution_summery: str | None

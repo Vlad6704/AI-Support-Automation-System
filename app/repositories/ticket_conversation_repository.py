@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
-from app.enums import MessageSource
+from app.enums import MessageSource, TicketStatus
 from app.models import Customer, Message, TicketHistory
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ class TicketConversationRepository(Protocol):
         customer_id: int,
         title: str,
         description: str,
-        status: str,
+        status: TicketStatus,
         updated_by: str,
         initial_message_source: MessageSource,
     ) -> TicketHistory: ...
@@ -86,7 +86,7 @@ class DatabaseTicketConversationRepository:
         customer_id: int,
         title: str,
         description: str,
-        status: str,
+        status: TicketStatus,
         updated_by: str,
         initial_message_source: MessageSource,
     ) -> TicketHistory:

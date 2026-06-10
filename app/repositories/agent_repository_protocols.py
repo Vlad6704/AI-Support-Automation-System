@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Protocol, TypeAlias, TypedDict
 
-from app.enums import AffectedService
+from app.enums import AffectedService, TicketStatus, TicketSupportability
 
 
 class CustomerData(TypedDict):
@@ -21,7 +21,8 @@ class TicketHistoryData(TypedDict):
     description: str
     created_at: datetime
     updated_at: datetime
-    status: str
+    status: TicketStatus
+    supportability: TicketSupportability
     category: str | None
     updated_by: str | None
     resolution_summery: str | None

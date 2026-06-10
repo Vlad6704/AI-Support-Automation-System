@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
+from app.enums import TicketStatus, TicketSupportability
+from app.enums.utils import enum_values
 
 
 def utc_now() -> datetime:
@@ -23,7 +25,24 @@ class TicketHistory(Base):
         default=utc_now,
         onupdate=utc_now,
     )
-    status: Mapped[str] = mapped_column(String(50), index=True)
+    status: Mapped[TicketStatus] = mapped_column(
+        Enum(
+            TicketStatus,
+            values_callable=enum_values,
+            native_enum=False,
+        ),
+        index=True,
+    )
+    supportability: Mapped[TicketSupportability] = mapped_column(
+        Enum(
+            TicketSupportability,
+            values_callable=enum_values,
+            native_enum=False,
+        ),
+        default=TicketSupportability.UNCHECKED,
+        server_default=TicketSupportability.UNCHECKED.value,
+        index=True,
+    )
     category: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     updated_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     resolution_summery: Mapped[str | None] = mapped_column(Text, nullable=True)

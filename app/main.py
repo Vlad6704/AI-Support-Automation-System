@@ -10,7 +10,6 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from app.api import api_router
-from app.db import Base, engine
 from app.logging_config import configure_logging
 from app.observability import shutdown_langfuse
 
@@ -21,7 +20,6 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Application starting")
-    Base.metadata.create_all(bind=engine)
     try:
         yield
     finally:

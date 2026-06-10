@@ -3,7 +3,7 @@ from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, Field
 
-from app.enums import MessageSource
+from app.enums import MessageSource, TicketStatus
 
 
 def non_blank(value: str) -> str:
@@ -34,7 +34,7 @@ class TicketResponse(BaseModel):
     description: str
     created_at: datetime
     updated_at: datetime
-    status: str
+    status: TicketStatus
 
 
 class CreateTicketRequest(BaseModel):

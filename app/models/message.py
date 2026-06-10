@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
 from app.enums import MessageSource
+from app.enums.utils import enum_values
 
 
 def utc_now() -> datetime:
@@ -27,7 +28,7 @@ class Message(Base):
     source: Mapped[MessageSource] = mapped_column(
         Enum(
             MessageSource,
-            values_callable=lambda enum: [item.value for item in enum],
+            values_callable=enum_values,
             native_enum=False,
         ),
         index=True,
