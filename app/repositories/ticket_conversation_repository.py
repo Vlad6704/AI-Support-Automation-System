@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
+import logging
 from typing import Protocol
 
 from sqlalchemy import func, select
@@ -9,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.enums import MessageSource
 from app.models import Customer, Message, TicketHistory
+
+logger = logging.getLogger(__name__)
 
 
 class TicketConversationRepository(Protocol):
@@ -109,6 +112,7 @@ class DatabaseTicketConversationRepository:
             self.db.refresh(ticket)
         except Exception:
             self.db.rollback()
+            logger.exception("Ticket transaction failed customer_id=%s", customer_id)
             raise
         return ticket
 
@@ -132,6 +136,11 @@ class DatabaseTicketConversationRepository:
             self.db.refresh(stored_message)
         except Exception:
             self.db.rollback()
+            logger.exception(
+                "Message transaction failed ticket_id=%s source=%s",
+                ticket_id,
+                source,
+            )
             raise
         return stored_message
 

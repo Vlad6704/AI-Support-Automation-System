@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
+import logging
 
 from app.enums import MessageSource
 from app.models import Customer, Message, TicketHistory
@@ -10,6 +11,8 @@ from app.services.exceptions import (
     TicketNotFoundError,
 )
 from app.services.ticket_agent import TicketAgentService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -56,9 +59,10 @@ class TicketConversationService:
         description: str,
     ) -> TicketHistory:
         if self.repository.get_customer(customer_id) is None:
+            logger.warning("Ticket creation rejected customer_id=%s", customer_id)
             raise CustomerNotFoundError(f"Customer {customer_id} does not exist.")
 
-        return self.repository.create_ticket(
+        ticket = self.repository.create_ticket(
             customer_id=customer_id,
             title=title,
             description=description,
@@ -66,10 +70,13 @@ class TicketConversationService:
             updated_by="customer",
             initial_message_source=MessageSource.USER,
         )
+        logger.info("Ticket created ticket_id=%s customer_id=%s", ticket.id, customer_id)
+        return ticket
 
     def get_ticket(self, ticket_id: int) -> TicketHistory:
         ticket = self.repository.get_ticket(ticket_id)
         if ticket is None:
+            logger.warning("Ticket not found ticket_id=%s", ticket_id)
             raise TicketNotFoundError(f"Ticket {ticket_id} does not exist.")
         return ticket
 
@@ -90,13 +97,24 @@ class TicketConversationService:
             message=message,
             source=MessageSource.USER,
         )
+        logger.info(
+            "User message stored ticket_id=%s message_id=%s",
+            ticket.id,
+            user_message.id,
+        )
 
         try:
             agent_message = self.ticket_agent_service.run_and_store_response(ticket.id)
         except Exception as error:
+            logger.exception("Agent response failed ticket_id=%s", ticket.id)
             raise AgentResponseError(
                 f"Agent response failed for ticket {ticket.id}."
             ) from error
+        logger.info(
+            "Conversation response completed ticket_id=%s agent_message_id=%s",
+            ticket.id,
+            agent_message.id,
+        )
         return ConversationMessages(
             user_message=user_message,
             agent_message=agent_message,

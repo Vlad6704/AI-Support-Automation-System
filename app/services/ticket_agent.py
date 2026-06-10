@@ -1,5 +1,7 @@
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+import logging
+from time import perf_counter
 
 from app.agents.context import create_database_agent_context
 from app.agents.main_agent_invocation import (
@@ -14,6 +16,8 @@ from app.repositories import (
     database_ticket_conversation_repository,
 )
 from app.services.exceptions import TicketNotFoundError
+
+logger = logging.getLogger(__name__)
 
 
 RepositoryContextFactory = Callable[
@@ -35,6 +39,12 @@ class TicketAgentService:
         *,
         new_thread: bool = False,
     ) -> Message:
+        started_at = perf_counter()
+        logger.info(
+            "Agent response started ticket_id=%s new_thread=%s",
+            ticket_id,
+            new_thread,
+        )
         if new_thread:
             delete_ticket_thread(ticket_id)
         result = invoke_main_agent_for_ticket(
@@ -43,10 +53,18 @@ class TicketAgentService:
         )
         draft_response = str(result.get("draft_response") or "").strip()
         if not draft_response:
+            logger.error("Agent returned empty response ticket_id=%s", ticket_id)
             raise ValueError(f"Agent returned no draft response for ticket {ticket_id}.")
 
         with self.repository_factory() as repository:
-            return self._store_response(repository, ticket_id, draft_response)
+            message = self._store_response(repository, ticket_id, draft_response)
+        logger.info(
+            "Agent response stored ticket_id=%s message_id=%s duration_ms=%.2f",
+            ticket_id,
+            message.id,
+            (perf_counter() - started_at) * 1000,
+        )
+        return message
 
     @staticmethod
     def _store_response(
@@ -56,6 +74,7 @@ class TicketAgentService:
     ) -> Message:
         ticket = repository.get_ticket(ticket_id)
         if ticket is None:
+            logger.warning("Cannot store agent response; ticket missing ticket_id=%s", ticket_id)
             raise TicketNotFoundError(f"Ticket {ticket_id} does not exist.")
 
         return repository.create_message(
