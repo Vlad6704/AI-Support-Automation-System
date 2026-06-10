@@ -1,15 +1,9 @@
 from fastapi import APIRouter
-from pydantic import BaseModel
 
 from app.agents.billing_agent.main import run_billing_agent
+from app.schemas import ExecuteAgentRequest
 
 router = APIRouter(prefix="/agent", tags=["agent"])
-
-
-class ExecuteAgentRequest(BaseModel):
-    ticket: str
-    thread_id: str = "ticket-1"
-    user_id: str | None = None
 
 
 @router.post("/execute")

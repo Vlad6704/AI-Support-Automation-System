@@ -1,28 +1,23 @@
 from datetime import datetime
 from pathlib import Path
 from sqlite3 import connect
-from sys import argv
 from typing import Annotated, Literal, TypedDict, cast
 
 from langchain.chat_models import init_chat_model
-from langchain.messages import HumanMessage, SystemMessage
-from langchain_core.messages import MessageLikeRepresentation
+from langchain.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, MessageLikeRepresentation
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import add_messages
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.runtime import Runtime
 from pydantic import BaseModel
 
 from app.agents.context import (
     AgentContext,
-    create_database_agent_context,
-    create_stub_agent_context,
 )
 from app.agents.webhook_agent import graph as webhook_agent_graph
-from app.observability import invoke_graph_with_langfuse, shutdown_langfuse
 from app.repositories import CustomerContextData
-
-from rich import print
 
 Intent = Literal["support", "not_support"]
 SupportCategory = Literal["webhook", "other"]
@@ -55,6 +50,7 @@ class MainAgentState(TypedDict, total=False):
     category: str | None
     updated_by: str | None
     resolution_summery: str | None
+    messages: Annotated[list[BaseMessage], add_messages]
     customer: CustomerData
     customer_context: CustomerContextData
     intent: Intent
@@ -78,6 +74,8 @@ def node_classify_intent(
 ) -> MainAgentState:
     model = init_chat_model(model="openai:gpt-5.4-nano")
     structured_model = model.with_structured_output(IntentOutput)
+    conversation = state.get("messages", [])
+    ticket_message = conversation[-1].content if conversation else state.get("description")
     messages: list[MessageLikeRepresentation] = [
         SystemMessage(
             "Classify whether this ticket message is related to customer support. "
@@ -90,7 +88,7 @@ def node_classify_intent(
             "category='other' for all other requests."
         ),
         HumanMessage(
-            f"Title: {state.get('title')}\n\nDescription: {state.get('description')}"
+            f"Title: {state.get('title')}\n\nMessage: {ticket_message}"
         ),
     ]
     result = cast(IntentOutput, structured_model.invoke(messages, config=config))
@@ -136,6 +134,7 @@ def node_get_draft_response(
             "Ticket:\n"
             f"Title: {state.get('title')}\n"
             f"Description: {state.get('description')}\n\n"
+            f"Conversation messages: {state.get('messages', [])}\n\n"
             f"Intent: {state.get('intent')}\n"
             f"Intent reason: {state.get('intent_reason')}\n"
             f"Customer data: {state.get('customer')}\n"
@@ -145,6 +144,7 @@ def node_get_draft_response(
     result = cast(DraftOutput, structured_model.invoke(messages, config=config))
     return {
         "draft_response": result.draft,
+        "messages": [AIMessage(content=result.draft)],
         "node_calls": {
             "node_get_draft_response": {
                 "messages": messages,
@@ -163,6 +163,7 @@ def node_return_friendly_message(state: MainAgentState) -> MainAgentState:
     )
     return {
         "draft_response": message,
+        "messages": [AIMessage(content=message)],
         "node_calls": {
             "node_return_friendly_message": {
                 "result": {
@@ -206,39 +207,3 @@ CHECKPOINT_DB_PATH = Path(__file__).resolve().parents[2] / "checkpoints.db"
 checkpoint_connection = connect(CHECKPOINT_DB_PATH, check_same_thread=False)
 checkpointer = SqliteSaver(checkpoint_connection)
 graph = builder.compile(checkpointer=checkpointer)
-
-
-def get_ticket_data(
-    ticket_id: int | None = None,
-    *,
-    context: AgentContext,
-) -> MainAgentState | None:
-    if ticket_id is None:
-        return context.repository.get_first_ticket()
-    return context.repository.get_ticket_by_id(ticket_id)
-
-
-if __name__ == "__main__":
-    ticket_id = int(argv[1]) if len(argv) > 1 else None
-    context = create_stub_agent_context()
-    ticket_data = get_ticket_data(ticket_id, context=context)
-    if ticket_data is None:
-        if ticket_id is None:
-            raise SystemExit("No ticket_history rows found.")
-        raise SystemExit(f"No ticket_history row found for id {ticket_id}.")
-
-    try:
-        thread_id = f"ticket-{ticket_data['id']}"
-        result = invoke_graph_with_langfuse(
-            graph,
-            ticket_data,
-            trace_name="main-agent",
-            config={"configurable": {"thread_id": thread_id}},
-            session_id=thread_id,
-            user_id=str(ticket_data["customer_id"]),
-            tags=("main-agent", "support"),
-            context=context,
-        )
-        print(result)
-    finally:
-        shutdown_langfuse()

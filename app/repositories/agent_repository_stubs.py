@@ -50,6 +50,15 @@ class StubAgentRepository:
         tickets = sorted(self.world.ticket_history, key=lambda row: row.id)
         return cast(TicketHistoryData, tickets[0].model_dump()) if tickets else None
 
+    def get_latest_user_message(self, ticket_id: int) -> SerializedRow | None:
+        messages = [
+            row
+            for row in self.world.messages
+            if row.ticket_id == ticket_id and row.source.value == "user"
+        ]
+        messages.sort(key=lambda row: (row.created_at, row.id), reverse=True)
+        return _serialize_row(messages[0]) if messages else None
+
     def get_invoice_by_id(self, invoice_id: int) -> InvoiceData | None:
         invoice = next(
             (
@@ -66,6 +75,7 @@ class StubAgentRepository:
         )
         return {
             "customer": _serialize_row(customer) if customer else None,
+            "messages": self._latest_for_customer(self.world.messages, customer_id),
             "subscriptions": self._latest_for_customer(
                 self.world.subscriptions, customer_id
             ),

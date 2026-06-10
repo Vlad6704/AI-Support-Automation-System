@@ -4,12 +4,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.enums import AffectedService, WebhookDeliveryStatus
+from app.enums import AffectedService, MessageSource, WebhookDeliveryStatus
 from app.models import (
     ApiUsageLog,
     Customer,
     Deployment,
     Incident,
+    Message,
     Subscription,
     SupportTeamMember,
     TicketHistory,
@@ -69,6 +70,16 @@ class InvoiceData(WorldRow):
     end_date: str
     amount: str
     refundable: bool
+
+
+class MessageData(WorldRow):
+    id: int
+    customer_id: int
+    ticket_id: int
+    message: str
+    created_at: datetime
+    updated_at: datetime
+    source: MessageSource
 
 
 class SubscriptionData(WorldRow):
@@ -136,6 +147,7 @@ class WorldData(BaseModel):
     deployments: list[DeploymentData]
     incidents: list[IncidentData]
     invoices: list[InvoiceData] = Field(default_factory=list)
+    messages: list[MessageData]
     subscriptions: list[SubscriptionData]
     support_team_members: list[SupportTeamMemberData]
     ticket_history: list[TicketHistoryData]
@@ -148,6 +160,7 @@ WORLD_MODEL_SCHEMAS = {
     Customer: CustomerData,
     Deployment: DeploymentData,
     Incident: IncidentData,
+    Message: MessageData,
     Subscription: SubscriptionData,
     SupportTeamMember: SupportTeamMemberData,
     TicketHistory: TicketHistoryData,

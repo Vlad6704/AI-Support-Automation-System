@@ -5,12 +5,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
-from app.enums import AffectedService
+from app.enums import AffectedService, MessageSource
 from app.models import (
     ApiUsageLog,
     Customer,
     Deployment,
     Incident,
+    Message,
     Subscription,
     TicketHistory,
     WebhookDeliveryLog,
@@ -95,6 +96,21 @@ class DatabaseAgentRepository:
         finally:
             db.close()
 
+    def get_latest_user_message(self, ticket_id: int) -> SerializedRow | None:
+        db = SessionLocal()
+        try:
+            message = db.scalars(
+                select(Message)
+                .where(
+                    Message.ticket_id == ticket_id,
+                    Message.source == MessageSource.USER,
+                )
+                .order_by(Message.created_at.desc(), Message.id.desc())
+            ).first()
+            return model_to_dict(message) if message is not None else None
+        finally:
+            db.close()
+
     def get_invoice_by_id(self, invoice_id: int) -> InvoiceData | None:
         return None
 
@@ -104,6 +120,7 @@ class DatabaseAgentRepository:
             customer = db.get(Customer, customer_id)
             return {
                 "customer": model_to_dict(customer) if customer else None,
+                "messages": _all_for_customer(db, Message, customer_id),
                 "subscriptions": _all_for_customer(db, Subscription, customer_id),
                 "api_usage_logs": _all_for_customer(db, ApiUsageLog, customer_id),
                 "ticket_history": _all_for_customer(db, TicketHistory, customer_id),

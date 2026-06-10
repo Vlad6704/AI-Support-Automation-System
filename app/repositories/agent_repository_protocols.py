@@ -41,6 +41,7 @@ SerializedRow: TypeAlias = dict[str, SerializedValue]
 
 class CustomerContextData(TypedDict):
     customer: SerializedRow | None
+    messages: list[SerializedRow]
     subscriptions: list[SerializedRow]
     api_usage_logs: list[SerializedRow]
     ticket_history: list[SerializedRow]
@@ -54,6 +55,8 @@ class AgentRepository(Protocol):
     def get_ticket_by_id(self, ticket_id: int) -> TicketHistoryData | None: ...
 
     def get_first_ticket(self) -> TicketHistoryData | None: ...
+
+    def get_latest_user_message(self, ticket_id: int) -> SerializedRow | None: ...
 
     def get_invoice_by_id(self, invoice_id: int) -> InvoiceData | None: ...
 

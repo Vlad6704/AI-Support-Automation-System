@@ -52,6 +52,8 @@ class WorldSchemaTests(unittest.TestCase):
                 for log in context["webhook_delivery_logs"]
             )
         )
+        self.assertEqual(context["messages"][0]["source"], "support_team")
+        self.assertEqual(context["messages"][0]["ticket_id"], 5)
 
 
 if __name__ == "__main__":

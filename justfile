@@ -4,7 +4,7 @@ server:
     uv run -m main
 
 agent ticket="":
-    uv run -m app.agents.main_agent {{ticket}}
+    uv run -m app.agents.main_agent_invocation {{ticket}}
 
 eval:
     uv run -m eval.langfuse.webhook.main_agent_experiment
