@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Protocol, TypeAlias, TypedDict
+from typing import Any, Literal, Protocol, TypeAlias, TypedDict
 
 from app.enums import AffectedService, TicketStatus, TicketSupportability
 
@@ -38,6 +38,37 @@ class InvoiceData(TypedDict):
 
 SerializedValue: TypeAlias = Any
 SerializedRow: TypeAlias = dict[str, SerializedValue]
+WhereOperator: TypeAlias = Literal[
+    "eq",
+    "ne",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "in",
+    "not_in",
+    "contains",
+    "starts_with",
+    "ends_with",
+    "is_null",
+    "is_not_null",
+]
+
+
+class WhereCondition(TypedDict):
+    column: str
+    operator: WhereOperator
+    value: SerializedValue
+
+
+class RepositoryWhere(TypedDict):
+    match: Literal["all", "any"]
+    conditions: list[WhereCondition]
+
+
+class QueryResult(TypedDict):
+    rows: list[SerializedRow]
+    count: int
 
 
 class CustomerContextData(TypedDict):
@@ -46,8 +77,8 @@ class CustomerContextData(TypedDict):
     subscriptions: list[SerializedRow]
     api_usage_logs: list[SerializedRow]
     ticket_history: list[SerializedRow]
-    webhook_delivery_logs: list[SerializedRow]
-    webhook_endpoints: list[SerializedRow]
+    last_30_webhook_delivery_logs: list[SerializedRow]
+    last_30_webhook_endpoints: list[SerializedRow]
 
 
 class AgentRepository(Protocol):
@@ -62,6 +93,22 @@ class AgentRepository(Protocol):
     def get_invoice_by_id(self, invoice_id: int) -> InvoiceData | None: ...
 
     def get_customer_context(self, customer_id: int) -> CustomerContextData: ...
+
+    def get_webhook_delivery_logs(
+        self,
+        customer_id: int,
+        where: RepositoryWhere | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> QueryResult: ...
+
+    def get_webhook_endpoints(
+        self,
+        customer_id: int,
+        where: RepositoryWhere | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> QueryResult: ...
 
     def get_incidents(
         self,

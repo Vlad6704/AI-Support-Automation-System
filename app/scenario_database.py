@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+import tempfile
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -65,3 +66,21 @@ def scenario_session_factory(
         yield sessionmaker(autocommit=False, autoflush=False, bind=engine)
     finally:
         engine.dispose()
+
+
+@contextmanager
+def concurrent_scenario_session_factory(
+    world_path: Path,
+) -> Iterator[sessionmaker[Session]]:
+    """Create an isolated file-backed scenario database for concurrent queries."""
+    with tempfile.TemporaryDirectory() as directory:
+        database_path = Path(directory) / f"{world_path.stem}.db"
+        database_url = create_scenario_database(world_path, database_path)
+        engine = create_engine(
+            database_url,
+            connect_args={"check_same_thread": False},
+        )
+        try:
+            yield sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        finally:
+            engine.dispose()

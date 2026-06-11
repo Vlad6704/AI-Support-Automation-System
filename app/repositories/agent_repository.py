@@ -1,7 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, not_, or_, select
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db import SessionLocal
@@ -22,6 +23,8 @@ from app.repositories.agent_repository_protocols import (
     CustomerContextData,
     CustomerData,
     InvoiceData,
+    QueryResult,
+    RepositoryWhere,
     SerializedRow,
     TicketHistoryData,
 )
@@ -69,6 +72,131 @@ def _all_for_customer(
         .limit(limit)
     ).all()
     return [model_to_dict(row) for row in rows]
+
+
+def _query_for_customer(
+    db: Session,
+    model: Any,
+    customer_id: int,
+    where: RepositoryWhere | None,
+    limit: int,
+    offset: int,
+) -> QueryResult:
+    conditions = [model.customer_id == customer_id]
+    if where is not None and where["conditions"]:
+        where_conditions = [
+            _build_where_condition(model, condition)
+            for condition in where["conditions"]
+        ]
+        conditions.append(
+            or_(*where_conditions)
+            if where["match"] == "any"
+            else and_(*where_conditions)
+        )
+    safe_limit = max(1, min(limit, 100))
+    safe_offset = max(0, offset)
+
+    count = db.scalar(
+        select(func.count()).select_from(model).where(*conditions)
+    )
+    rows = db.scalars(
+        select(model)
+        .where(*conditions)
+        .order_by(model.id.desc())
+        .offset(safe_offset)
+        .limit(safe_limit)
+    ).all()
+    return {
+        "rows": [model_to_dict(row) for row in rows],
+        "count": count or 0,
+    }
+
+
+def _coerce_filter_value(model: Any, name: str, value: Any) -> Any:
+    column_type = model.__table__.columns[name].type
+    try:
+        python_type = column_type.python_type
+    except NotImplementedError:
+        return value
+
+    if python_type is datetime and isinstance(value, datetime):
+        return value
+    if python_type is date and isinstance(value, date):
+        return value
+    if python_type not in {datetime, date}:
+        return value
+    if not isinstance(value, str):
+        raise ValueError(
+            f"Invalid {model.__name__} filter value for {name}: "
+            f"expected ISO timestamp string, got {type(value).__name__}"
+        )
+
+    try:
+        if python_type is datetime:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if python_type is date:
+            return date.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(
+            f"Invalid {model.__name__} filter value for {name}: {value!r}"
+        ) from error
+    return value
+
+
+def _build_where_condition(
+    model: Any,
+    condition: dict[str, Any],
+) -> ColumnElement[bool]:
+    name = condition["column"]
+    operator = condition["operator"]
+    value = condition.get("value")
+    if name == "customer_id":
+        raise ValueError("customer_id is fixed by the ticket and cannot be filtered")
+    if name not in model.__table__.columns:
+        raise ValueError(f"Invalid {model.__name__} where column: {name}")
+
+    column = getattr(model, name)
+    if operator == "is_null":
+        return column.is_(None)
+    if operator == "is_not_null":
+        return column.is_not(None)
+    if operator in {"in", "not_in"}:
+        if not isinstance(value, list) or not value:
+            raise ValueError(f"{operator} requires a non-empty list value")
+        coerced = [_coerce_filter_value(model, name, item) for item in value]
+        expression = column.in_(coerced)
+        return not_(expression) if operator == "not_in" else expression
+    if value is None:
+        raise ValueError(f"{operator} requires a value")
+
+    coerced_value = _coerce_filter_value(model, name, value)
+    if operator == "eq":
+        return column == coerced_value
+    if operator == "ne":
+        return column != coerced_value
+    if operator == "gt":
+        return column > coerced_value
+    if operator == "gte":
+        return column >= coerced_value
+    if operator == "lt":
+        return column < coerced_value
+    if operator == "lte":
+        return column <= coerced_value
+    if not isinstance(coerced_value, str):
+        raise ValueError(f"{operator} requires a string value")
+    try:
+        python_type = model.__table__.columns[name].type.python_type
+    except NotImplementedError:
+        python_type = None
+    if operator in {"starts_with", "ends_with"} and python_type is not str:
+        raise ValueError(f"{operator} requires a string column")
+    if operator == "contains":
+        return column.contains(coerced_value)
+    if operator == "starts_with":
+        return column.startswith(coerced_value)
+    if operator == "ends_with":
+        return column.endswith(coerced_value)
+    raise ValueError(f"Unsupported where operator: {operator}")
 
 
 class DatabaseAgentRepository:
@@ -134,17 +262,59 @@ class DatabaseAgentRepository:
                 "subscriptions": _all_for_customer(db, Subscription, customer_id),
                 "api_usage_logs": _all_for_customer(db, ApiUsageLog, customer_id),
                 "ticket_history": _all_for_customer(db, TicketHistory, customer_id),
-                "webhook_delivery_logs": _all_for_customer(
+                "last_30_webhook_delivery_logs": _all_for_customer(
                     db,
                     WebhookDeliveryLog,
                     customer_id,
+                    limit=30,
                 ),
-                "webhook_endpoints": _all_for_customer(
+                "last_30_webhook_endpoints": _all_for_customer(
                     db,
                     WebhookEndpoint,
                     customer_id,
+                    limit=30,
                 ),
             }
+        finally:
+            db.close()
+
+    def get_webhook_delivery_logs(
+        self,
+        customer_id: int,
+        where: RepositoryWhere | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> QueryResult:
+        db = self.session_factory()
+        try:
+            return _query_for_customer(
+                db,
+                WebhookDeliveryLog,
+                customer_id,
+                where,
+                limit,
+                offset,
+            )
+        finally:
+            db.close()
+
+    def get_webhook_endpoints(
+        self,
+        customer_id: int,
+        where: RepositoryWhere | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> QueryResult:
+        db = self.session_factory()
+        try:
+            return _query_for_customer(
+                db,
+                WebhookEndpoint,
+                customer_id,
+                where,
+                limit,
+                offset,
+            )
         finally:
             db.close()
 

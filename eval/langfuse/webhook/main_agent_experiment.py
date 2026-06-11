@@ -11,7 +11,7 @@ from langfuse.experiment import ExperimentResult
 from app.agents.context import create_database_agent_context
 from app.agents.main_agent import MainAgentState, graph
 from app.observability import merge_langfuse_callbacks, shutdown_langfuse
-from app.scenario_database import scenario_session_factory
+from app.scenario_database import concurrent_scenario_session_factory
 from app.scenarios import world_path
 
 DATASET_NAME = "case_1"
@@ -41,7 +41,7 @@ async def _invoke_main_agent(input_: Any) -> dict[str, Any]:
         }
     )
     def invoke() -> dict[str, Any]:
-        with scenario_session_factory(world_path("world_1")) as sessions:
+        with concurrent_scenario_session_factory(world_path("world_1")) as sessions:
             return cast(
                 dict[str, Any],
                 graph.invoke(

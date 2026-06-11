@@ -4,6 +4,8 @@ from app.repositories.agent_repository_protocols import (
     CustomerContextData,
     CustomerData,
     InvoiceData,
+    QueryResult,
+    RepositoryWhere,
     SerializedRow,
     TicketHistoryData,
 )
@@ -25,6 +27,8 @@ __all__ = [
     "DatabaseDraftReviewRepository",
     "DatabaseTicketConversationRepository",
     "InvoiceData",
+    "QueryResult",
+    "RepositoryWhere",
     "DraftReviewRepository",
     "SerializedRow",
     "TicketHistoryData",

@@ -22,6 +22,9 @@ agent ticket="":
 eval:
     uv run -m eval.langfuse.webhook.main_agent_experiment
 
+eval-webhook-delivery-logs:
+    uv run -m eval.langfuse.webhook.webhook_delivery_logs_agent_experiment
+
 tests:
     uv run -m unittest discover -s tests
 

@@ -8,3 +8,4 @@
 - Do not suppress or ignore type errors merely to make the type checker pass.
 - If no type checker is configured or type checking cannot be run, clearly
   report that limitation.
+- Avoid [Any]

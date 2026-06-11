@@ -19,13 +19,14 @@ Langfuse(mask=lambda *, data, **_: mask_sensitive_data(data))
 EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}\b")
 PHONE_RE = re.compile(r"(?<!\d)(?:\+?\d[\d .()/-]{7,}\d)(?!\d)")
 CREDIT_CARD_RE = re.compile(r"\b(?:\d[ -]*?){13,19}\b")
+ISO_DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}(?:[T ]|$)")
 
 
 def mask_sensitive_data(data: Any) -> Any:
     if isinstance(data, str):
         masked = EMAIL_RE.sub("[REDACTED_EMAIL]", data)
         masked = CREDIT_CARD_RE.sub("[REDACTED_CARD]", masked)
-        return PHONE_RE.sub("[REDACTED_PHONE]", masked)
+        return PHONE_RE.sub(_mask_phone_candidate, masked)
 
     if isinstance(data, Mapping):
         return {
@@ -42,6 +43,14 @@ def mask_sensitive_data(data: Any) -> Any:
         return tuple(mask_sensitive_data(item) for item in data)
 
     return data
+
+
+def _mask_phone_candidate(match: re.Match[str]) -> str:
+    candidate = match.group(0)
+    if ISO_DATE_PREFIX_RE.match(candidate):
+        return candidate
+    digit_count = sum(character.isdigit() for character in candidate)
+    return "[REDACTED_PHONE]" if digit_count >= 9 else candidate
 
 
 def merge_langfuse_callbacks(config: RunnableConfig | None = None) -> RunnableConfig:

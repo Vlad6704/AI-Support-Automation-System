@@ -44,22 +44,22 @@ class WorldSchemaTests(unittest.TestCase):
         finally:
             db.close()
 
-    def test_webhook_context_contains_endpoints_and_event_payloads(self) -> None:
+    def test_customer_context_contains_recent_webhook_data(self) -> None:
         with scenario_session_factory(SCENARIOS_DIR / "world_1.json") as sessions:
             context = DatabaseAgentRepository(sessions).get_customer_context(2)
 
         self.assertEqual(
-            context["webhook_endpoints"][0]["events"],
-            ["order.created", "payment.failed"],
-        )
-        self.assertEqual(
             context["api_usage_logs"][0]["payload"]["payment_id"],
             "pay_2002",
+        )
+        self.assertEqual(
+            context["last_30_webhook_endpoints"][0]["events"],
+            ["order.created", "payment.failed"],
         )
         self.assertTrue(
             all(
                 log["webhook_endpoint_id"] == 2
-                for log in context["webhook_delivery_logs"]
+                for log in context["last_30_webhook_delivery_logs"]
             )
         )
         self.assertEqual(context["messages"][0]["source"], "support_team")

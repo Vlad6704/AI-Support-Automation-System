@@ -29,7 +29,13 @@ from app.agents.webhook_agent.nodes import (
     DraftOutput as WebhookDraftOutput,
     GuardrailOutput as WebhookGuardrailOutput,
     node_get_customer_context,
+    node_get_draft_response,
+    node_investigation_orchestrator,
     node_validate_draft_response,
+)
+from app.agents.tools import (
+    run_webhook_delivery_logs_agent,
+    run_webhook_endpoints_agent,
 )
 
 
@@ -62,6 +68,58 @@ class WebhookAgentTests(unittest.TestCase):
 
         self.assertEqual(result.get("customer_context"), {"customer": {"id": 1}})
         repository.get_customer_context.assert_called_once_with(1)
+
+    @patch("app.agents.webhook_agent.nodes.create_agent")
+    def test_investigation_orchestrator_uses_delegated_agents(
+        self,
+        create_agent: Mock,
+    ) -> None:
+        agent = create_agent.return_value
+        agent.invoke.return_value = {
+            "messages": [AIMessage("Delivery failures affect 10% of attempts.")]
+        }
+        runtime = Runtime(context=AgentContext(repository=Mock()))
+
+        result = node_investigation_orchestrator(
+            {
+                "customer_id": 2,
+                "title": "Webhook failures",
+                "description": "Some deliveries fail.",
+                "customer_context": {"customer": {"id": 2}},
+            },
+            runtime,
+        )
+
+        self.assertEqual(
+            result.get("investigation_result"),
+            "Delivery failures affect 10% of attempts.",
+        )
+        create_kwargs = create_agent.call_args.kwargs
+        self.assertEqual(create_kwargs["model"], "openai:gpt-5.4-nano")
+        self.assertEqual(
+            create_kwargs["tools"],
+            [run_webhook_delivery_logs_agent, run_webhook_endpoints_agent],
+        )
+        self.assertEqual(agent.invoke.call_args.args[0]["customer_id"], 2)
+
+    @patch("app.agents.webhook_agent.nodes.init_chat_model")
+    def test_draft_response_uses_investigation_result(
+        self,
+        init_chat_model: Mock,
+    ) -> None:
+        structured_model = Mock()
+        structured_model.invoke.return_value = WebhookDraftOutput(draft="Draft.")
+        init_chat_model.return_value.with_structured_output.return_value = structured_model
+
+        node_get_draft_response(
+            {
+                "description": "Webhook deliveries fail.",
+                "investigation_result": "Confirmed 150 failed deliveries.",
+            }
+        )
+
+        messages = structured_model.invoke.call_args.args[0]
+        self.assertIn("Confirmed 150 failed deliveries.", messages[1].content)
 
     def test_webhook_subgraph_revalidates_reviewed_draft_without_regenerating(self) -> None:
         self.assertEqual(
@@ -215,12 +273,14 @@ class WebhookAgentTests(unittest.TestCase):
         self.assertEqual(update["draft_response"], "Human-edited response.")
         self.assertEqual(update["draft_review_id"], 1)
 
+    @patch("app.agents.webhook_agent.nodes.create_agent")
     @patch("app.agents.webhook_agent.nodes.init_chat_model")
     @patch("app.agents.main_agent.init_chat_model")
     def test_high_risk_draft_interrupts_then_human_edit_is_finalized(
         self,
         main_init_chat_model: Mock,
         webhook_init_chat_model: Mock,
+        create_agent: Mock,
     ) -> None:
         guardrails = iter(
             [
@@ -265,6 +325,9 @@ class WebhookAgentTests(unittest.TestCase):
         webhook_init_chat_model.return_value.with_structured_output.side_effect = (
             webhook_structured_output
         )
+        create_agent.return_value.invoke.return_value = {
+            "messages": [AIMessage("Investigation complete.")]
+        }
         repository = Mock()
         repository.get_customer_context.return_value = {"customer": {"id": 2}}
         context = AgentContext(repository=repository)

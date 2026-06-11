@@ -30,6 +30,7 @@ class WebhookAgentState(TypedDict, total=False):
     status: TicketStatus
     messages: list[BaseMessage]
     customer_context: CustomerContextData
+    investigation_result: str
     intent: str
     intent_reason: str
     draft_response: str | None
