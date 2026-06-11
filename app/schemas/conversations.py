@@ -63,4 +63,4 @@ class CreateMessageRequest(BaseModel):
 
 class ConversationResponse(BaseModel):
     user_message: MessageResponse
-    agent_message: MessageResponse
+    agent_message: MessageResponse | None

@@ -61,6 +61,7 @@ async def log_requests(
 INBOX_PATH = Path(__file__).resolve().parent / "static" / "inbox.html"
 NEW_TICKET_PATH = Path(__file__).resolve().parent / "static" / "new_ticket.html"
 TICKET_PATH = Path(__file__).resolve().parent / "static" / "ticket.html"
+REVIEWS_PATH = Path(__file__).resolve().parent / "static" / "reviews.html"
 
 
 @app.get("/", include_in_schema=False)
@@ -76,3 +77,8 @@ def new_ticket() -> FileResponse:
 @app.get("/tickets/{ticket_id}", include_in_schema=False)
 def ticket(ticket_id: int) -> FileResponse:
     return FileResponse(TICKET_PATH)
+
+
+@app.get("/reviews", include_in_schema=False)
+def reviews() -> FileResponse:
+    return FileResponse(REVIEWS_PATH)

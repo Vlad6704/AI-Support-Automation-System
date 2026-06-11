@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from langfuse import get_client
 from langfuse.experiment import ExperimentResult
 
 from app.agents.context import create_stub_agent_context
-from app.agents.main_agent import graph
+from app.agents.main_agent import MainAgentState, graph
 from app.observability import merge_langfuse_callbacks, shutdown_langfuse
 
 DATASET_NAME = "case_1"
@@ -38,11 +38,15 @@ async def _invoke_main_agent(input_: Any) -> dict[str, Any]:
             }
         }
     )
-    return await asyncio.to_thread(
-        graph.invoke,
-        dict(input_),
-        config=config,
-        context=create_stub_agent_context(),
+    return cast(
+        dict[str, Any],
+        await asyncio.to_thread(
+            lambda: graph.invoke(
+                cast(MainAgentState, dict(input_)),
+                config=config,
+                context=create_stub_agent_context(),
+            )
+        ),
     )
 
 

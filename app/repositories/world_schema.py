@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.enums import (
     AffectedService,
+    DraftReviewStatus,
     MessageSource,
     TicketStatus,
     TicketSupportability,
@@ -15,6 +16,7 @@ from app.models import (
     ApiUsageLog,
     Customer,
     Deployment,
+    DraftReview,
     Incident,
     Message,
     Subscription,
@@ -56,6 +58,21 @@ class DeploymentData(WorldRow):
     status: str
     summary: str | None
     rollback_available: bool
+
+
+class DraftReviewData(WorldRow):
+    id: int
+    previous_review_id: int | None
+    ticket_id: int
+    customer_id: int
+    original_draft: str
+    edited_draft: str | None
+    created_at: datetime
+    updated_at: datetime
+    updated_by: str | None
+    reviewer_notes: str | None
+    guardrail_feedback: str | None
+    status: DraftReviewStatus
 
 
 class IncidentData(WorldRow):
@@ -152,6 +169,7 @@ class WorldData(BaseModel):
     api_usage_logs: list[ApiUsageLogData]
     customers: list[CustomerData]
     deployments: list[DeploymentData]
+    drafts_review: list[DraftReviewData]
     incidents: list[IncidentData]
     invoices: list[InvoiceData] = Field(default_factory=list)
     messages: list[MessageData]
@@ -166,6 +184,7 @@ WORLD_MODEL_SCHEMAS = {
     ApiUsageLog: ApiUsageLogData,
     Customer: CustomerData,
     Deployment: DeploymentData,
+    DraftReview: DraftReviewData,
     Incident: IncidentData,
     Message: MessageData,
     Subscription: SubscriptionData,

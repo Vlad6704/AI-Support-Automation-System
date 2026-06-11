@@ -1,4 +1,5 @@
 from langgraph.checkpoint.memory import InMemorySaver
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
@@ -45,7 +46,7 @@ def run_billing_agent(
     user_id: str | None = None,
     context: AgentContext | None = None,
 ) -> SupportState:
-    config = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
     return invoke_graph_with_langfuse(
         graph,
         {"ticket": user_input},
@@ -61,11 +62,12 @@ def run_billing_agent(
 if __name__ == "__main__":
     thread_id = "ticket-1"
     context = create_stub_agent_context()
-    config = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
     user_input = input("Input: ")
     result = run_billing_agent(user_input, thread_id=thread_id, context=context)
-    if result.get("__interrupt__") is not None:
-        print(result.get("__interrupt__")[0].value)
+    interrupts = result.get("__interrupt__")
+    if interrupts:
+        print(interrupts[0].value)
         user_input = input("> ")
         result = invoke_graph_with_langfuse(
             graph,

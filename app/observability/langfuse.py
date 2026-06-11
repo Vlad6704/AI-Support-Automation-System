@@ -4,9 +4,10 @@ import re
 from collections.abc import Iterable, Mapping
 from copy import copy
 from datetime import date, datetime
-from typing import Any, TypeVar
+from typing import Any
 
 from dotenv import load_dotenv
+from langchain_core.callbacks import BaseCallbackManager
 from langchain_core.runnables import RunnableConfig
 from langfuse import Langfuse, get_client, propagate_attributes
 from langfuse.langchain import CallbackHandler
@@ -14,8 +15,6 @@ from langfuse.langchain import CallbackHandler
 load_dotenv()
 
 Langfuse(mask=lambda *, data, **_: mask_sensitive_data(data))
-
-T = TypeVar("T")
 
 EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}\b")
 PHONE_RE = re.compile(r"(?<!\d)(?:\+?\d[\d .()/-]{7,}\d)(?!\d)")
@@ -47,7 +46,11 @@ def mask_sensitive_data(data: Any) -> Any:
 
 def merge_langfuse_callbacks(config: RunnableConfig | None = None) -> RunnableConfig:
     merged: RunnableConfig = copy(config) if config is not None else {}
-    callbacks = list(merged.get("callbacks") or [])
+    configured_callbacks = merged.get("callbacks")
+    if isinstance(configured_callbacks, BaseCallbackManager):
+        callbacks = list(configured_callbacks.handlers)
+    else:
+        callbacks = list(configured_callbacks or [])
     callbacks.append(CallbackHandler())
     merged["callbacks"] = callbacks
     return merged
@@ -64,7 +67,7 @@ def invoke_graph_with_langfuse(
     tags: Iterable[str] = (),
     metadata: Mapping[str, Any] | None = None,
     context: Any = None,
-) -> T:
+) -> Any:
     langfuse = get_client()
     langfuse_config = merge_langfuse_callbacks(config)
 
@@ -83,7 +86,7 @@ def invoke_graph_with_langfuse(
             user_id=user_id,
             tags=list(tags),
         ):
-            result: T = graph.invoke(
+            result = graph.invoke(
                 input_data,
                 config=langfuse_config,
                 context=context,

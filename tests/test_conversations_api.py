@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime
+from typing import cast
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -9,9 +10,9 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.api.providers import get_ticket_conversation_service
-from app.enums import MessageSource, TicketStatus
+from app.enums import DraftReviewStatus, MessageSource, TicketStatus
 from app.main import app
-from app.models import Customer, Message, TicketHistory
+from app.models import Customer, DraftReview, Message, TicketHistory
 from app.repositories import DatabaseTicketConversationRepository
 
 
@@ -52,6 +53,15 @@ class ConversationApiTests(unittest.TestCase):
                     source=MessageSource.USER,
                 )
             )
+            db.add(
+                DraftReview(
+                    id=1,
+                    ticket_id=1,
+                    customer_id=1,
+                    original_draft="Please provide the affected event ID.",
+                    status=DraftReviewStatus.OPEN,
+                )
+            )
             db.commit()
 
         def override_get_db():
@@ -83,12 +93,28 @@ class ConversationApiTests(unittest.TestCase):
     def test_service_provider_uses_request_database_session(self) -> None:
         with Session(self.engine) as db:
             service = get_ticket_conversation_service(db)
+            repository = cast(DatabaseTicketConversationRepository, service.repository)
 
             self.assertIsInstance(
-                service.repository,
+                repository,
                 DatabaseTicketConversationRepository,
             )
-            self.assertIs(service.repository.db, db)
+            self.assertIs(repository.db, db)
+
+    def test_lists_open_draft_reviews(self) -> None:
+        response = self.client.get("/api/draft-reviews")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()[0]["ticket_id"], 1)
+        self.assertEqual(response.json()[0]["status"], "open")
+
+    def test_gets_draft_review_detail(self) -> None:
+        response = self.client.get("/api/draft-reviews/1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["ticket_title"], "Webhook payload is incorrect")
+        self.assertIn("agent_state", response.json())
+        self.assertEqual(response.json()["history"][0]["id"], 1)
 
     def test_creates_support_reply(self) -> None:
         agent_message = Message(
@@ -153,11 +179,13 @@ class ConversationApiTests(unittest.TestCase):
         response = self.client.get("/")
         new_ticket = self.client.get("/tickets/new")
         ticket = self.client.get("/tickets/1")
+        reviews = self.client.get("/reviews")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("Support inbox", response.text)
         self.assertIn("Create a support ticket", new_ticket.text)
         self.assertIn("Waiting for the support agent", ticket.text)
+        self.assertIn("Draft reviews", reviews.text)
 
 
 if __name__ == "__main__":

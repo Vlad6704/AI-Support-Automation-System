@@ -10,7 +10,12 @@ from langgraph.runtime import Runtime
 from langsmith import Client
 from pydantic import BaseModel
 
-from app.agents.billing_agent.state import BillingSubcategory, Category, SupportState
+from app.agents.billing_agent.state import (
+    BillingData,
+    BillingSubcategory,
+    Category,
+    SupportState,
+)
 from app.agents.context import AgentContext
 
 load_dotenv()
@@ -115,8 +120,11 @@ def node_ask_fot_billing_data(
         BillingDataOutput,
         billing_data_model.invoke(extraction_messages, config=config),
     )
+    extracted_billing_data: BillingData = {}
+    if billing_data.invoice_id is not None:
+        extracted_billing_data["invoice_id"] = billing_data.invoice_id
     return {
-        "billing_data": {"invoice_id": billing_data.invoice_id},
+        "billing_data": extracted_billing_data,
         "node_calls": {
             "node_ask_fot_billing_data": {
                 "messages": messages + extraction_messages,

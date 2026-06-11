@@ -8,6 +8,11 @@ from app.repositories.agent_repository_protocols import (
     TicketHistoryData,
 )
 from app.repositories.agent_repository_stubs import StubAgentRepository
+from app.repositories.draft_review_repository import (
+    DatabaseDraftReviewRepository,
+    DraftReviewRepository,
+    database_draft_review_repository,
+)
 from app.repositories.ticket_conversation_repository import (
     DatabaseTicketConversationRepository,
     TicketConversationRepository,
@@ -19,11 +24,14 @@ __all__ = [
     "CustomerContextData",
     "CustomerData",
     "DatabaseAgentRepository",
+    "DatabaseDraftReviewRepository",
     "DatabaseTicketConversationRepository",
     "InvoiceData",
+    "DraftReviewRepository",
     "SerializedRow",
     "StubAgentRepository",
     "TicketHistoryData",
     "TicketConversationRepository",
     "database_ticket_conversation_repository",
+    "database_draft_review_repository",
 ]

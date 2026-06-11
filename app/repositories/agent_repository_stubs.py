@@ -131,5 +131,5 @@ class StubAgentRepository:
         customer_rows = [
             row for row in rows if getattr(row, "customer_id", None) == customer_id
         ]
-        customer_rows.sort(key=lambda row: row.id, reverse=True)
+        customer_rows.sort(key=lambda row: int(getattr(row, "id")), reverse=True)
         return [_serialize_row(row) for row in customer_rows[:limit]]

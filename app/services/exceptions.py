@@ -8,3 +8,7 @@ class TicketNotFoundError(ValueError):
 
 class AgentResponseError(RuntimeError):
     pass
+
+
+class DraftReviewNotFoundError(ValueError):
+    pass

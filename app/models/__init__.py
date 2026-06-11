@@ -1,6 +1,7 @@
 from app.models.api_usage_log import ApiUsageLog
 from app.models.customer import Customer
 from app.models.deployment import Deployment
+from app.models.draft_review import DraftReview
 from app.models.incident import Incident
 from app.models.message import Message
 from app.models.subscription import Subscription
@@ -13,6 +14,7 @@ __all__ = [
     "ApiUsageLog",
     "Customer",
     "Deployment",
+    "DraftReview",
     "Incident",
     "Message",
     "Subscription",

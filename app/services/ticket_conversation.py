@@ -25,7 +25,7 @@ class TicketSummaryData:
 @dataclass(frozen=True)
 class ConversationMessages:
     user_message: Message
-    agent_message: Message
+    agent_message: Message | None
 
 
 class TicketConversationService:
@@ -113,7 +113,7 @@ class TicketConversationService:
         logger.info(
             "Conversation response completed ticket_id=%s agent_message_id=%s",
             ticket.id,
-            agent_message.id,
+            agent_message.id if agent_message is not None else None,
         )
         return ConversationMessages(
             user_message=user_message,

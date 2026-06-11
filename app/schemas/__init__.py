@@ -10,6 +10,13 @@ from app.schemas.conversations import (
     TicketSummary,
 )
 from app.schemas.experiments import RemoteExperimentConfig, RemoteExperimentRequest
+from app.schemas.draft_reviews import (
+    DraftReviewDetail,
+    DraftReviewHistoryItem,
+    DraftReviewSummary,
+    SubmitDraftReviewRequest,
+    SubmitDraftReviewResponse,
+)
 
 __all__ = [
     "ConversationResponse",
@@ -17,10 +24,15 @@ __all__ = [
     "CreateTicketRequest",
     "CreateTicketResponse",
     "CustomerOption",
+    "DraftReviewDetail",
+    "DraftReviewHistoryItem",
+    "DraftReviewSummary",
     "ExecuteAgentRequest",
     "MessageResponse",
     "RemoteExperimentConfig",
     "RemoteExperimentRequest",
     "TicketResponse",
     "TicketSummary",
+    "SubmitDraftReviewRequest",
+    "SubmitDraftReviewResponse",
 ]

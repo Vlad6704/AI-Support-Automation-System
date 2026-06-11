@@ -14,10 +14,11 @@ async def execute_agent(request: ExecuteAgentRequest):
         user_id=request.user_id,
     )
 
-    if result.get("__interrupt__") is not None:
+    interrupts = result.get("__interrupt__")
+    if interrupts:
         return {
             "thread_id": request.thread_id,
-            "interrupt": result.get("__interrupt__")[0].value,
+            "interrupt": interrupts[0].value,
         }
 
     return {

@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from app.agents.context import AgentContext
+from app.agents.main_agent import MainAgentState
 from app.agents.main_agent_invocation import (
     invoke_existing_ticket_thread,
     invoke_main_agent_for_ticket,
@@ -13,7 +14,7 @@ class MainAgentInvocationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.repository = Mock()
         self.context = AgentContext(repository=self.repository)
-        self.ticket = {
+        self.ticket: MainAgentState = {
             "id": 5,
             "customer_id": 2,
             "title": "Webhook events contain incorrect data",

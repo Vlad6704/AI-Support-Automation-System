@@ -2,6 +2,7 @@ import unittest
 from datetime import datetime
 from unittest.mock import patch
 
+from langchain.messages import AIMessage
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -74,6 +75,9 @@ class TicketConversationServiceTests(unittest.TestCase):
                 select(Message).where(Message.ticket_id == ticket_id)
             ).one()
 
+        self.assertIsNotNone(stored_ticket)
+        if stored_ticket is None:
+            self.fail("Created ticket was not stored.")
         self.assertEqual(stored_ticket.title, "New webhook issue")
         self.assertEqual(message.message, "A webhook contains unexpected fields.")
         self.assertEqual(message.source, MessageSource.USER)
@@ -155,7 +159,9 @@ class TicketConversationServiceTests(unittest.TestCase):
         invoke_agent,
         delete_thread,
     ) -> None:
-        invoke_agent.return_value = {"draft_response": "Please provide the event ID."}
+        invoke_agent.return_value = {
+            "messages": [AIMessage(content="Please provide the event ID.")]
+        }
 
         with patch(
             "app.repositories.ticket_conversation_repository.SessionLocal",
@@ -165,11 +171,35 @@ class TicketConversationServiceTests(unittest.TestCase):
                 database_ticket_conversation_repository
             ).run_and_store_response(1, new_thread=True)
 
+        self.assertIsNotNone(message)
+        if message is None:
+            self.fail("Agent message was not stored.")
         self.assertEqual(message.source, MessageSource.SUPPORT_TEAM)
         delete_thread.assert_called_once_with(1)
         with Session(self.engine) as db:
             stored = db.scalars(select(Message)).one()
             self.assertEqual(stored.message, "Please provide the event ID.")
+
+    @patch("app.services.ticket_agent.ticket_thread_is_interrupted", return_value=True)
+    @patch("app.services.ticket_agent.invoke_main_agent_for_ticket")
+    def test_does_not_store_message_while_agent_waits_for_review(
+        self,
+        invoke_agent,
+        is_interrupted,
+    ) -> None:
+        invoke_agent.return_value = {"draft_response": "Pending review."}
+
+        with patch(
+            "app.repositories.ticket_conversation_repository.SessionLocal",
+            side_effect=lambda: Session(self.engine),
+        ):
+            message = TicketAgentService(
+                database_ticket_conversation_repository
+            ).run_and_store_response(1)
+
+        self.assertIsNone(message)
+        with Session(self.engine) as db:
+            self.assertEqual(list(db.scalars(select(Message)).all()), [])
 
 
 if __name__ == "__main__":

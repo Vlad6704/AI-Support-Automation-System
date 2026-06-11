@@ -1,8 +1,10 @@
 from app.services.exceptions import (
     AgentResponseError,
     CustomerNotFoundError,
+    DraftReviewNotFoundError,
     TicketNotFoundError,
 )
+from app.services.draft_review import DraftReviewService
 from app.services.ticket_agent import (
     TicketAgentService,
     run_agent_and_store_ticket_response,
@@ -17,6 +19,8 @@ __all__ = [
     "ConversationMessages",
     "AgentResponseError",
     "CustomerNotFoundError",
+    "DraftReviewNotFoundError",
+    "DraftReviewService",
     "TicketAgentService",
     "TicketConversationService",
     "TicketNotFoundError",
