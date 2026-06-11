@@ -27,9 +27,9 @@ SupportCategory = Literal["webhook", "other"]
 GuardrailDecision = Literal["valid", "invalid"]
 DraftRisk = Literal["low", "mid", "high"]
 RiskDestination = Literal["support_review", "finalize_response"]
-SupportReviewDestination = Literal["guardrail_output"]
-GuardrailDestination = Literal["draft_response", "estimate_risk", "close_prev_review"]
+SupportReviewDestination = Literal["webhook_agent"]
 ReviewCloseDestination = Literal["support_review", "finalize_response"]
+WebhookDestination = Literal["estimate_risk", "close_prev_review"]
 
 
 def merge_node_calls(
@@ -43,8 +43,7 @@ def message_content_text(message: BaseMessage) -> str:
     if isinstance(content, str):
         return content
     return "\n".join(
-        block if isinstance(block, str) else str(block)
-        for block in content
+        block if isinstance(block, str) else str(block) for block in content
     )
 
 
@@ -92,15 +91,6 @@ class IntentOutput(BaseModel):
     reason: str
 
 
-class DraftOutput(BaseModel):
-    draft: str
-
-
-class GuardrailOutput(BaseModel):
-    guardrail_decision: GuardrailDecision
-    guardrail_message: str
-
-
 class RiskOutput(BaseModel):
     draft_risk: DraftRisk
 
@@ -127,9 +117,7 @@ def node_classify_intent(
             "configuration, events, endpoints, retries, or failures. Return "
             "category='other' for all other requests."
         ),
-        HumanMessage(
-            f"Title: {state.get('title')}\n\nMessage: {ticket_message}"
-        ),
+        HumanMessage(f"Title: {state.get('title')}\n\nMessage: {ticket_message}"),
     ]
     result = cast(IntentOutput, structured_model.invoke(messages, config=config))
     return {
@@ -143,132 +131,6 @@ def node_classify_intent(
             }
         },
     }
-
-
-def node_get_customer_data(
-    state: MainAgentState,
-    runtime: Runtime[AgentContext],
-) -> MainAgentState:
-    customer_id = state.get("customer_id")
-    if customer_id is None:
-        return {}
-
-    customer = runtime.context.repository.get_customer_by_id(customer_id)
-    if customer is None:
-        return {}
-
-    return {"customer": customer}
-
-
-def node_get_draft_response(
-    state: MainAgentState, config: RunnableConfig | None = None
-) -> MainAgentState:
-    model = init_chat_model(model="openai:gpt-5.4-nano")
-    structured_model = model.with_structured_output(DraftOutput)
-    messages: list[MessageLikeRepresentation] = [
-        SystemMessage(
-            "You are a support agent. Write a concise, helpful draft response for the "
-            "ticket."
-        ),
-        HumanMessage(
-            "Ticket:\n"
-            f"Title: {state.get('title')}\n"
-            f"Description: {state.get('description')}\n\n"
-            f"Conversation messages: {state.get('messages', [])}\n\n"
-            f"Intent: {state.get('intent')}\n"
-            f"Intent reason: {state.get('intent_reason')}\n"
-            f"Customer data: {state.get('customer')}\n"
-            f"Customer context: {state.get('customer_context')}\n"
-            f"Previous guardrail feedback: {state.get('draft_guardrail')}"
-        ),
-    ]
-    result = cast(DraftOutput, structured_model.invoke(messages, config=config))
-    return {
-        "draft_response": result.draft,
-        "node_calls": {
-            "node_get_draft_response": {
-                "messages": messages,
-                "result": result.model_dump(),
-            }
-        },
-    }
-
-
-def node_validate_draft_response(
-    state: MainAgentState,
-    config: RunnableConfig | None = None,
-) -> MainAgentState:
-    model = init_chat_model(model="openai:gpt-5.4-nano")
-    structured_model = model.with_structured_output(GuardrailOutput)
-    conversation = state.get("messages", [])
-    user_messages = [
-        message_content_text(message)
-        for message in conversation
-        if isinstance(message, HumanMessage)
-    ]
-    user_message = user_messages[-1] if user_messages else state.get("description")
-    business_policy = (
-        "Responses must be safe, professional, and materially accurate. Reasonable "
-        "requests for more information and commitments to investigate after receiving "
-        "that information are allowed. Reject only clear, meaningful policy violations."
-    )
-    approved_actions = (
-        "Ask for relevant troubleshooting details, explain available findings, say "
-        "that the support team can check or investigate after receiving needed details, "
-        "and provide reasonable next steps. Do not promise refunds, credits, account "
-        "changes, cancellations, or a specific resolution unless explicitly supported."
-    )
-    messages: list[MessageLikeRepresentation] = [
-        SystemMessage(
-            "Validate a drafted customer-support response before it is sent. Approve "
-            "the draft unless it contains a clear, material problem. Do not reject it "
-            "for minor wording, style, completeness, or formatting preferences. Allow "
-            "reasonable uncertainty, requests for identifiers or timestamps, references "
-            "to currently unavailable records, and commitments to check or investigate "
-            "once the customer provides needed details. Return guardrail_decision="
-            "'invalid' only for harmful content, private-data leakage, hidden reasoning "
-            "or sensitive internal details, unauthorized financial or account-action "
-            "promises, clearly invented factual claims, or seriously unprofessional "
-            "language. A technical field name alone is not sensitive internal leakage. "
-            "When uncertain, return guardrail_decision='valid'. Set guardrail_message "
-            "to a concise description of a material violation when invalid, or a short "
-            "confirmation when valid."
-        ),
-        HumanMessage(
-            "User message:\n"
-            f"{user_message}\n\n"
-            "Retrieved/support context:\n"
-            f"{state.get('customer_context') or state.get('customer')}\n\n"
-            "Draft message:\n"
-            f"{state.get('draft_response')}\n\n"
-            "Business policy:\n"
-            f"{business_policy}\n\n"
-            "Approved actions:\n"
-            f"{approved_actions}"
-        ),
-    ]
-    result = cast(GuardrailOutput, structured_model.invoke(messages, config=config))
-    draft_guardrail: DraftGuardrail = {
-        "decision": result.guardrail_decision,
-        "message": result.guardrail_message,
-    }
-    return {
-        "draft_guardrail": draft_guardrail,
-        "node_calls": {
-            "node_validate_draft_response": {
-                "messages": messages,
-                "result": result.model_dump(),
-            }
-        },
-    }
-
-
-def route_after_guardrail(state: MainAgentState) -> GuardrailDestination:
-    if state.get("draft_review_id") is not None:
-        return "close_prev_review"
-    if (state.get("draft_guardrail") or {}).get("decision") == "invalid":
-        return "draft_response"
-    return "estimate_risk"
 
 
 def node_close_prev_review(
@@ -376,7 +238,7 @@ def node_support_review(
         updated_by=review_input.get("updated_by") or "support_team",
     )
     return Command[SupportReviewDestination](
-        goto="guardrail_output",
+        goto="webhook_agent",
         update={
             "draft_response": edited_draft,
             "draft_review_id": review.id,
@@ -399,10 +261,16 @@ def node_finalize_response(state: MainAgentState) -> MainAgentState:
 
 def node_return_friendly_message(state: MainAgentState) -> MainAgentState:
     message = (
-        "Thanks for reaching out. This message does not look like a support request, "
-        "so I do not have a ticket-specific action to take right now. If you need "
-        "help with the product, your account, billing, or a technical issue, please "
-        "send a few details and I will be happy to help."
+        "Thanks for reaching out. Webhook support is currently the only automated "
+        "support category available, so this request needs to be handled by the "
+        "support team."
+        if state.get("intent") == "support"
+        else (
+            "Thanks for reaching out. This message does not look like a support request, "
+            "so I do not have a ticket-specific action to take right now. If you need "
+            "help with the product, your account, billing, or a technical issue, please "
+            "send a few details and I will be happy to help."
+        )
     )
     return {
         "draft_response": message,
@@ -421,23 +289,24 @@ def node_return_friendly_message(state: MainAgentState) -> MainAgentState:
 
 def route_after_intent(
     state: MainAgentState,
-) -> Literal["webhook_agent", "get_customer_data", "friendly_message"]:
+) -> Literal["webhook_agent", "friendly_message"]:
     if state.get("intent") == "support" and state.get("category") in {
         "webhook",
         "webhooks",
     }:
         return "webhook_agent"
-    if state.get("intent") == "support":
-        return "get_customer_data"
     return "friendly_message"
+
+
+def route_after_webhook_agent(state: MainAgentState) -> WebhookDestination:
+    if state.get("draft_review_id") is not None:
+        return "close_prev_review"
+    return "estimate_risk"
 
 
 builder = StateGraph(MainAgentState, context_schema=AgentContext)
 builder.add_node("classify_intent", node_classify_intent)
 builder.add_node("webhook_agent", webhook_agent_graph)
-builder.add_node("get_customer_data", node_get_customer_data)
-builder.add_node("draft_response", node_get_draft_response)
-builder.add_node("guardrail_output", node_validate_draft_response)
 builder.add_node("close_prev_review", node_close_prev_review)
 builder.add_node("estimate_risk", node_estimate_draft_risk)
 builder.add_node("support_review", node_support_review)
@@ -446,10 +315,7 @@ builder.add_node("friendly_message", node_return_friendly_message)
 
 builder.add_edge(START, "classify_intent")
 builder.add_conditional_edges("classify_intent", route_after_intent)
-builder.add_edge("webhook_agent", "draft_response")
-builder.add_edge("get_customer_data", "draft_response")
-builder.add_edge("draft_response", "guardrail_output")
-builder.add_conditional_edges("guardrail_output", route_after_guardrail)
+builder.add_conditional_edges("webhook_agent", route_after_webhook_agent)
 builder.add_edge("finalize_response", END)
 builder.add_edge("friendly_message", END)
 

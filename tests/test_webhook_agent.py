@@ -12,19 +12,25 @@ from langgraph.types import Command
 from app.agents.context import AgentContext
 from app.agents.main_agent import (
     CHECKPOINT_DB_PATH,
-    DraftOutput,
-    GuardrailOutput,
     IntentOutput,
     RiskOutput,
     graph,
     node_finalize_response,
     node_support_review,
     node_estimate_draft_risk,
-    node_validate_draft_response,
-    route_after_guardrail,
     route_after_intent,
+    route_after_webhook_agent,
 )
-from app.agents.webhook_agent.nodes import node_get_customer_context
+from app.agents.webhook_agent.main import (
+    route_after_guardrail as route_after_webhook_guardrail,
+    route_start as route_webhook_start,
+)
+from app.agents.webhook_agent.nodes import (
+    DraftOutput as WebhookDraftOutput,
+    GuardrailOutput as WebhookGuardrailOutput,
+    node_get_customer_context,
+    node_validate_draft_response,
+)
 
 
 def command_update(command: Command[Any]) -> dict[str, Any]:
@@ -57,13 +63,31 @@ class WebhookAgentTests(unittest.TestCase):
         self.assertEqual(result.get("customer_context"), {"customer": {"id": 1}})
         repository.get_customer_context.assert_called_once_with(1)
 
-    @patch("app.agents.main_agent.init_chat_model")
+    def test_webhook_subgraph_revalidates_reviewed_draft_without_regenerating(self) -> None:
+        self.assertEqual(
+            route_webhook_start(
+                {
+                    "draft_response": "Human edit.",
+                    "draft_review_id": 4,
+                }
+            ),
+            "guardrail_output",
+        )
+
+    def test_main_routes_reviewed_webhook_draft_to_close_review(self) -> None:
+        self.assertEqual(
+            route_after_webhook_agent({"draft_review_id": 4}),
+            "close_prev_review",
+        )
+        self.assertEqual(route_after_webhook_agent({}), "estimate_risk")
+
+    @patch("app.agents.webhook_agent.nodes.init_chat_model")
     def test_invalid_draft_routes_back_with_guardrail_feedback(
         self,
         init_chat_model: Mock,
     ) -> None:
         structured_model = Mock()
-        structured_model.invoke.return_value = GuardrailOutput(
+        structured_model.invoke.return_value = WebhookGuardrailOutput(
             guardrail_decision="invalid",
             guardrail_message="The draft promises an unsupported refund.",
         )
@@ -76,17 +100,17 @@ class WebhookAgentTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(route_after_guardrail(result), "draft_response")
+        self.assertEqual(route_after_webhook_guardrail(result), "draft_response")
         guardrail = required_state_value(cast(dict[str, Any], result), "draft_guardrail")
         self.assertEqual(guardrail["decision"], "invalid")
         self.assertIn("unsupported refund", guardrail["message"])
 
-    @patch("app.agents.main_agent.init_chat_model")
+    @patch("app.agents.webhook_agent.nodes.init_chat_model")
     def test_valid_draft_routes_to_risk_estimation(
         self, init_chat_model: Mock
     ) -> None:
         structured_model = Mock()
-        structured_model.invoke.return_value = GuardrailOutput(
+        structured_model.invoke.return_value = WebhookGuardrailOutput(
             guardrail_decision="valid",
             guardrail_message="The draft is ready to send.",
         )
@@ -99,7 +123,7 @@ class WebhookAgentTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(route_after_guardrail(result), "estimate_risk")
+        self.assertEqual(route_after_webhook_guardrail(result), "__end__")
         guardrail = required_state_value(cast(dict[str, Any], result), "draft_guardrail")
         self.assertEqual(guardrail["decision"], "valid")
         guardrail_messages = structured_model.invoke.call_args.args[0]
@@ -176,6 +200,7 @@ class WebhookAgentTests(unittest.TestCase):
             {
                 "id": 10,
                 "customer_id": 2,
+                "category": "webhook",
                 "draft_response": "Agent draft.",
                 "draft_guardrail": {
                     "decision": "valid",
@@ -185,23 +210,25 @@ class WebhookAgentTests(unittest.TestCase):
             runtime,
         )
 
-        self.assertEqual(command.goto, "guardrail_output")
+        self.assertEqual(command.goto, "webhook_agent")
         update = command_update(command)
         self.assertEqual(update["draft_response"], "Human-edited response.")
         self.assertEqual(update["draft_review_id"], 1)
 
+    @patch("app.agents.webhook_agent.nodes.init_chat_model")
     @patch("app.agents.main_agent.init_chat_model")
     def test_high_risk_draft_interrupts_then_human_edit_is_finalized(
         self,
-        init_chat_model: Mock,
+        main_init_chat_model: Mock,
+        webhook_init_chat_model: Mock,
     ) -> None:
         guardrails = iter(
             [
-                GuardrailOutput(
+                WebhookGuardrailOutput(
                     guardrail_decision="valid",
                     guardrail_message="Approved.",
                 ),
-                GuardrailOutput(
+                WebhookGuardrailOutput(
                     guardrail_decision="valid",
                     guardrail_message="Approved after review.",
                 ),
@@ -213,32 +240,33 @@ class WebhookAgentTests(unittest.TestCase):
             if schema is IntentOutput:
                 structured_model.invoke.return_value = IntentOutput(
                     intent="support",
-                    category="other",
+                    category="webhook",
                     reason="Support request.",
-                )
-            elif schema is DraftOutput:
-                structured_model.invoke.return_value = DraftOutput(
-                    draft="High-risk agent draft."
-                )
-            elif schema is GuardrailOutput:
-                structured_model.invoke.side_effect = lambda *_args, **_kwargs: next(
-                    guardrails
                 )
             elif schema is RiskOutput:
                 structured_model.invoke.return_value = RiskOutput(draft_risk="high")
             return structured_model
 
-        init_chat_model.return_value.with_structured_output.side_effect = structured_output
+        def webhook_structured_output(schema):
+            structured_model = Mock()
+            if schema is WebhookDraftOutput:
+                structured_model.invoke.return_value = WebhookDraftOutput(
+                    draft="High-risk agent draft."
+                )
+            elif schema is WebhookGuardrailOutput:
+                structured_model.invoke.side_effect = lambda *_args, **_kwargs: next(
+                    guardrails
+                )
+            return structured_model
+
+        main_init_chat_model.return_value.with_structured_output.side_effect = (
+            structured_output
+        )
+        webhook_init_chat_model.return_value.with_structured_output.side_effect = (
+            webhook_structured_output
+        )
         repository = Mock()
-        repository.get_customer_by_id.return_value = {
-            "id": 2,
-            "company_name": "Acme",
-            "contact_email": "support@acme.test",
-            "region": None,
-            "plan": None,
-            "status": "active",
-            "created_at": "2026-06-10T00:00:00",
-        }
+        repository.get_customer_context.return_value = {"customer": {"id": 2}}
         context = AgentContext(repository=repository)
         config: RunnableConfig = {
             "configurable": {"thread_id": f"review-test-{uuid4()}"}
@@ -248,8 +276,8 @@ class WebhookAgentTests(unittest.TestCase):
             {
                 "id": 10,
                 "customer_id": 2,
-                "title": "Account access",
-                "description": "An unknown user accessed my account.",
+                "title": "Webhook security issue",
+                "description": "An unknown webhook destination received our events.",
             },
             config=config,
             context=context,
