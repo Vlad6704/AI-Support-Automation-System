@@ -28,6 +28,9 @@ eval-webhook-delivery-logs:
 tests:
     uv run -m unittest discover -s tests
 
+type-check:
+    uv run --with basedpyright basedpyright
+
 test-worlds:
     uv run -m unittest tests.test_world_schema tests.test_scenario_database
 

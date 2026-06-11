@@ -2,10 +2,11 @@
 
 ## Type Checking
 
-- After making code changes, run the repository's configured type checker.
+- After making code changes, run `just type-check`.
 - Check and fix all type errors reported after the changes before considering the
   task complete.
 - Do not suppress or ignore type errors merely to make the type checker pass.
-- If no type checker is configured or type checking cannot be run, clearly
-  report that limitation.
-- Avoid [Any]
+- Avoid `Any`.
+- BasedPyright unknown-type and explicit-`Any` diagnostics are configured as
+  errors in `pyrightconfig.json`.
+- `pyrightconfig.json` checks `app`, `eval`, and `tests`.

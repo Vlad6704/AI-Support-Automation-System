@@ -1,0 +1,22 @@
+{
+  "include": [
+    "app",
+    "eval",
+    "tests"
+  ],
+  "exclude": [
+    ".venv",
+    ".git",
+    ".scenarios"
+  ],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.14",
+  "typeCheckingMode": "standard",
+  "reportExplicitAny": "error",
+  "reportUnknownArgumentType": "error",
+  "reportUnknownLambdaType": "error",
+  "reportUnknownMemberType": "error",
+  "reportUnknownParameterType": "error",
+  "reportUnknownVariableType": "error"
+}

@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 from app.agents.context import AgentContext
 from app.agents.main_agent import MainAgentState
 from app.agents.main_agent_invocation import (
+    _invoke,
     invoke_existing_ticket_thread,
     invoke_main_agent_for_ticket,
     invoke_new_ticket_thread,
@@ -63,6 +64,22 @@ class MainAgentInvocationTests(unittest.TestCase):
 
         self.assertEqual(result, {"id": 5})
         invoke_new.assert_called_once_with(self.ticket, context=self.context)
+
+    @patch("app.agents.main_agent_invocation.invoke_graph_with_langfuse")
+    def test_trace_metadata_identifies_ticket_and_customer(self, invoke: Mock) -> None:
+        invoke.return_value = {"id": 5}
+
+        _invoke(self.ticket, ticket_data=self.ticket, context=self.context)
+
+        self.assertEqual(
+            invoke.call_args.kwargs["metadata"],
+            {
+                "ticket_id": 5,
+                "customer_id": 2,
+                "category": None,
+                "risk": None,
+            },
+        )
 
 
 if __name__ == "__main__":

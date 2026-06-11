@@ -128,6 +128,12 @@ def _invoke(
         session_id=thread_id,
         user_id=str(customer_id),
         tags=("main-agent", "support"),
+        metadata={
+            "ticket_id": ticket_id,
+            "customer_id": customer_id,
+            "category": ticket_data.get("category"),
+            "risk": ticket_data.get("draft_risk"),
+        },
         context=context,
     )
 
