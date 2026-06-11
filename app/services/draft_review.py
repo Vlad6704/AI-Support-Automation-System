@@ -3,12 +3,14 @@ from contextlib import AbstractContextManager, contextmanager
 from datetime import datetime, timezone
 from typing import Iterator
 
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.db import SessionLocal
 from app.enums import DraftReviewStatus
 from app.models import DraftReview, TicketHistory
 from app.repositories.draft_review_repository import (
     DatabaseDraftReviewRepository,
     DraftReviewRepository,
-    database_draft_review_repository,
 )
 from app.services.exceptions import DraftReviewNotFoundError
 
@@ -20,8 +22,19 @@ class DraftReviewService:
         self.repository_factory = repository_factory
 
     @classmethod
-    def database(cls) -> "DraftReviewService":
-        return cls(database_draft_review_repository)
+    def database(
+        cls,
+        session_factory: sessionmaker[Session] = SessionLocal,
+    ) -> "DraftReviewService":
+        @contextmanager
+        def repository_factory() -> Iterator[DatabaseDraftReviewRepository]:
+            db = session_factory()
+            try:
+                yield DatabaseDraftReviewRepository(db)
+            finally:
+                db.close()
+
+        return cls(repository_factory)
 
     @classmethod
     def in_memory(cls) -> "DraftReviewService":

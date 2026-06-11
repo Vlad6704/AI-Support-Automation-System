@@ -1,11 +1,8 @@
-from collections.abc import Iterator
-from contextlib import contextmanager
 from typing import Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db import SessionLocal
 from app.enums import DraftReviewStatus
 from app.models import DraftReview, TicketHistory
 
@@ -169,12 +166,3 @@ class DatabaseDraftReviewRepository:
         self.db.commit()
         self.db.refresh(review)
         return review
-
-
-@contextmanager
-def database_draft_review_repository() -> Iterator[DatabaseDraftReviewRepository]:
-    db = SessionLocal()
-    try:
-        yield DatabaseDraftReviewRepository(db)
-    finally:
-        db.close()

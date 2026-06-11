@@ -15,7 +15,7 @@ from app.agents.billing_agent.nodes import (
     node_get_invoice_date,
 )
 from app.agents.billing_agent.state import SupportState
-from app.agents.context import AgentContext, create_stub_agent_context
+from app.agents.context import AgentContext, create_database_agent_context
 from app.observability import invoke_graph_with_langfuse
 
 from rich import print
@@ -55,13 +55,13 @@ def run_billing_agent(
         session_id=thread_id,
         user_id=user_id,
         tags=("billing", "support-agent"),
-        context=context or create_stub_agent_context(),
+        context=context or create_database_agent_context(),
     )
 
 
 if __name__ == "__main__":
     thread_id = "ticket-1"
-    context = create_stub_agent_context()
+    context = create_database_agent_context()
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
     user_input = input("Input: ")
     result = run_billing_agent(user_input, thread_id=thread_id, context=context)

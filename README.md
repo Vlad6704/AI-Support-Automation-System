@@ -17,3 +17,38 @@
 - `main.py` - Root-level script entrypoint.
 - `pyproject.toml` - Python project metadata and dependencies.
 - `uv.lock` - Locked dependency versions managed by `uv`.
+
+## Scenario Databases
+
+JSON files in `scenarios/` are reproducible scenario seeds. Each scenario uses a
+dedicated database and checkpoint database under `.scenarios/`.
+
+To reset both databases, seed the scenario, and start the application:
+
+```powershell
+just scenario-seed-and-run world_1
+```
+
+To reset both databases and only seed the scenario:
+
+```powershell
+just scenario-seed world_1
+```
+
+To start the server while preserving the existing scenario data and checkpoints:
+
+```powershell
+just scenario world_1
+```
+
+The seed command prints the generated `DATABASE_URL`, which can be used to run
+other commands against the selected scenario database.
+
+You can also provide a JSON path:
+
+```powershell
+uv run -m app.scenarios run scenarios/world_1.json
+```
+
+Normal development continues to use `support.db` and `checkpoints.db`. Scenario
+databases are disposable and are rebuilt only by the scenario seed commands.

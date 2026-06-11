@@ -4,23 +4,32 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.db import SessionLocal
-from app.repositories.agent_repository_stubs import StubAgentRepository
-from app.repositories.world_schema import (
+from app.repositories import DatabaseAgentRepository
+from app.scenario_database import scenario_session_factory
+from app.scenario_world import (
     WORLD_MODEL_SCHEMAS,
+    WORLD_TABLES,
     load_world,
     validate_world_schema_matches_database_models,
 )
 
-STUBS_DIR = Path(__file__).resolve().parents[1] / "stubs"
+SCENARIOS_DIR = Path(__file__).resolve().parents[1] / "scenarios"
 
 
 class WorldSchemaTests(unittest.TestCase):
     def test_world_schema_matches_database_models(self) -> None:
         validate_world_schema_matches_database_models()
 
+    def test_every_world_table_is_seeded_once(self) -> None:
+        models = [model for model, _, _ in WORLD_TABLES]
+        sections = [section for _, _, section in WORLD_TABLES]
+
+        self.assertEqual(len(models), len(set(models)))
+        self.assertEqual(len(sections), len(set(sections)))
+
     def test_all_worlds_are_valid(self) -> None:
-        world_paths = list(STUBS_DIR.glob("*.json"))
-        self.assertTrue(world_paths, "No stub worlds found")
+        world_paths = list(SCENARIOS_DIR.glob("*.json"))
+        self.assertTrue(world_paths, "No scenario worlds found")
         for world_path in world_paths:
             with self.subTest(world=world_path.name):
                 load_world(world_path)
@@ -36,7 +45,8 @@ class WorldSchemaTests(unittest.TestCase):
             db.close()
 
     def test_webhook_context_contains_endpoints_and_event_payloads(self) -> None:
-        context = StubAgentRepository().get_customer_context(2)
+        with scenario_session_factory(SCENARIOS_DIR / "world_1.json") as sessions:
+            context = DatabaseAgentRepository(sessions).get_customer_context(2)
 
         self.assertEqual(
             context["webhook_endpoints"][0]["events"],

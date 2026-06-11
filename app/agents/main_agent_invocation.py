@@ -6,7 +6,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from app.agents.context import AgentContext, create_stub_agent_context
+from app.agents.context import AgentContext, create_database_agent_context
 from app.agents.main_agent import MainAgentState, graph
 from app.observability import invoke_graph_with_langfuse, shutdown_langfuse
 from rich import print
@@ -145,7 +145,7 @@ if __name__ == "__main__":
         print(
             invoke_main_agent_for_ticket(
                 requested_ticket_id,
-                context=create_stub_agent_context(),
+                context=create_database_agent_context(),
             )
         )
     except ValueError as error:

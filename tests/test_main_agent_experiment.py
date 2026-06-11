@@ -20,15 +20,18 @@ class MainAgentExperimentTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_runs_every_object_in_array_input(self) -> None:
         item = SimpleNamespace(input=[{"id": 1}, {"id": 2}])
+        session_factories = []
+
+        def invoke(input_, **kwargs):
+            session_factories.append(kwargs["context"].repository.session_factory)
+            return {
+                "id": input_["id"],
+                "draft_response": "First" if input_["id"] == 1 else "Second",
+            }
 
         with patch(
             "eval.langfuse.webhook.main_agent_experiment.graph.invoke",
-            new=Mock(
-                side_effect=[
-                    {"id": 1, "draft_response": "First"},
-                    {"id": 2, "draft_response": "Second"},
-                ]
-            ),
+            new=Mock(side_effect=invoke),
         ) as invoke:
             result = await run_main_agent(item=item)
 
@@ -40,6 +43,7 @@ class MainAgentExperimentTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
         self.assertEqual(invoke.call_count, 2)
+        self.assertIsNot(session_factories[0], session_factories[1])
 
     async def test_rejects_non_object_array_elements(self) -> None:
         item = SimpleNamespace(input=[{"id": 1}, "invalid"])

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.db import SessionLocal
 from app.enums import AffectedService, MessageSource
@@ -11,6 +11,7 @@ from app.models import (
     Customer,
     Deployment,
     Incident,
+    Invoice,
     Message,
     Subscription,
     TicketHistory,
@@ -71,8 +72,11 @@ def _all_for_customer(
 
 
 class DatabaseAgentRepository:
+    def __init__(self, session_factory: sessionmaker[Session] = SessionLocal) -> None:
+        self.session_factory = session_factory
+
     def get_customer_by_id(self, customer_id: int) -> CustomerData | None:
-        db = SessionLocal()
+        db = self.session_factory()
         try:
             customer = db.get(Customer, customer_id)
             return _customer_to_data(customer) if customer is not None else None
@@ -80,7 +84,7 @@ class DatabaseAgentRepository:
             db.close()
 
     def get_ticket_by_id(self, ticket_id: int) -> TicketHistoryData | None:
-        db = SessionLocal()
+        db = self.session_factory()
         try:
             ticket = db.get(TicketHistory, ticket_id)
             return _ticket_to_data(ticket) if ticket is not None else None
@@ -88,7 +92,7 @@ class DatabaseAgentRepository:
             db.close()
 
     def get_first_ticket(self) -> TicketHistoryData | None:
-        db = SessionLocal()
+        db = self.session_factory()
         try:
             ticket = db.scalars(
                 select(TicketHistory).order_by(TicketHistory.id)
@@ -98,7 +102,7 @@ class DatabaseAgentRepository:
             db.close()
 
     def get_latest_user_message(self, ticket_id: int) -> SerializedRow | None:
-        db = SessionLocal()
+        db = self.session_factory()
         try:
             message = db.scalars(
                 select(Message)
@@ -113,10 +117,15 @@ class DatabaseAgentRepository:
             db.close()
 
     def get_invoice_by_id(self, invoice_id: int) -> InvoiceData | None:
-        return None
+        db = self.session_factory()
+        try:
+            invoice = db.get(Invoice, invoice_id)
+            return model_to_dict(invoice) if invoice is not None else None
+        finally:
+            db.close()
 
     def get_customer_context(self, customer_id: int) -> CustomerContextData:
-        db = SessionLocal()
+        db = self.session_factory()
         try:
             customer = db.get(Customer, customer_id)
             return {
@@ -144,7 +153,7 @@ class DatabaseAgentRepository:
         affected_service: AffectedService,
         limit: int = 20,
     ) -> list[SerializedRow]:
-        db = SessionLocal()
+        db = self.session_factory()
         try:
             safe_limit = max(1, min(limit, 20))
             rows = db.scalars(
@@ -162,7 +171,7 @@ class DatabaseAgentRepository:
         deployed_from: datetime | None = None,
         deployed_to: datetime | None = None,
     ) -> list[SerializedRow]:
-        db = SessionLocal()
+        db = self.session_factory()
         try:
             statement = select(Deployment)
             if deployed_from is not None:

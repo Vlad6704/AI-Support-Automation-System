@@ -1,4 +1,5 @@
 from datetime import datetime
+import os
 from pathlib import Path
 from sqlite3 import connect
 from typing import Annotated, Literal, TypedDict, cast
@@ -452,7 +453,13 @@ builder.add_conditional_edges("guardrail_output", route_after_guardrail)
 builder.add_edge("finalize_response", END)
 builder.add_edge("friendly_message", END)
 
-CHECKPOINT_DB_PATH = Path(__file__).resolve().parents[2] / "checkpoints.db"
+CHECKPOINT_DB_PATH = Path(
+    os.getenv(
+        "CHECKPOINT_DATABASE_PATH",
+        Path(__file__).resolve().parents[2] / "checkpoints.db",
+    )
+)
+CHECKPOINT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 checkpoint_connection = connect(CHECKPOINT_DB_PATH, check_same_thread=False)
 checkpointer = SqliteSaver(checkpoint_connection)
 graph = builder.compile(checkpointer=checkpointer)

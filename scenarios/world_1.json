@@ -46,7 +46,7 @@
   "customers": [
     {
       "id": 1,
-      "company_name": "Northstar Analytics",
+      "company_name": "Northstar Analytics test name",
       "contact_email": "ops@northstar-analytics.com",
       "region": "North America",
       "plan": "Enterprise",

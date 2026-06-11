@@ -18,6 +18,7 @@ from app.models import (
     Deployment,
     DraftReview,
     Incident,
+    Invoice,
     Message,
     Subscription,
     SupportTeamMember,
@@ -180,18 +181,24 @@ class WorldData(BaseModel):
     webhook_endpoints: list[WebhookEndpointData]
 
 
+WORLD_TABLES = (
+    (Customer, CustomerData, "customers"),
+    (Deployment, DeploymentData, "deployments"),
+    (Incident, IncidentData, "incidents"),
+    (Invoice, InvoiceData, "invoices"),
+    (SupportTeamMember, SupportTeamMemberData, "support_team_members"),
+    (TicketHistory, TicketHistoryData, "ticket_history"),
+    (WebhookEndpoint, WebhookEndpointData, "webhook_endpoints"),
+    (ApiUsageLog, ApiUsageLogData, "api_usage_logs"),
+    (Subscription, SubscriptionData, "subscriptions"),
+    (Message, MessageData, "messages"),
+    (WebhookDeliveryLog, WebhookDeliveryLogData, "webhook_delivery_logs"),
+    (DraftReview, DraftReviewData, "drafts_review"),
+)
+
 WORLD_MODEL_SCHEMAS = {
-    ApiUsageLog: ApiUsageLogData,
-    Customer: CustomerData,
-    Deployment: DeploymentData,
-    DraftReview: DraftReviewData,
-    Incident: IncidentData,
-    Message: MessageData,
-    Subscription: SubscriptionData,
-    SupportTeamMember: SupportTeamMemberData,
-    TicketHistory: TicketHistoryData,
-    WebhookDeliveryLog: WebhookDeliveryLogData,
-    WebhookEndpoint: WebhookEndpointData,
+    database_model: world_schema
+    for database_model, world_schema, _ in WORLD_TABLES
 }
 
 
@@ -200,7 +207,15 @@ def load_world(path: Path) -> WorldData:
 
 
 def validate_world_schema_matches_database_models() -> None:
-    for database_model, world_schema in WORLD_MODEL_SCHEMAS.items():
+    world_sections = set(WorldData.model_fields)
+    registered_sections = {section for _, _, section in WORLD_TABLES}
+    if world_sections != registered_sections:
+        raise ValueError(
+            "WorldData sections do not match registered world tables: "
+            f"world={sorted(world_sections)}, registered={sorted(registered_sections)}"
+        )
+
+    for database_model, world_schema, _ in WORLD_TABLES:
         database_fields = set(database_model.__table__.columns.keys())
         schema_fields = set(world_schema.model_fields)
         if database_fields != schema_fields:

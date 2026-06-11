@@ -1,11 +1,13 @@
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.db import SessionLocal
 from app.models import DraftReview
 from app.repositories import (
     AgentRepository,
     DatabaseAgentRepository,
-    StubAgentRepository,
 )
 
 
@@ -50,19 +52,12 @@ class AgentContext:
     )
 
 
-def create_stub_agent_context(world: str = "world_1") -> AgentContext:
+def create_database_agent_context(
+    session_factory: sessionmaker[Session] = SessionLocal,
+) -> AgentContext:
     from app.services.draft_review import DraftReviewService
 
     return AgentContext(
-        repository=StubAgentRepository(world),
-        draft_review_service=DraftReviewService.in_memory(),
-    )
-
-
-def create_database_agent_context() -> AgentContext:
-    from app.services.draft_review import DraftReviewService
-
-    return AgentContext(
-        repository=DatabaseAgentRepository(),
-        draft_review_service=DraftReviewService.database(),
+        repository=DatabaseAgentRepository(session_factory),
+        draft_review_service=DraftReviewService.database(session_factory),
     )

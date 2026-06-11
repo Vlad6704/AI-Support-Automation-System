@@ -3,6 +3,7 @@ from app.models.customer import Customer
 from app.models.deployment import Deployment
 from app.models.draft_review import DraftReview
 from app.models.incident import Incident
+from app.models.invoice import Invoice
 from app.models.message import Message
 from app.models.subscription import Subscription
 from app.models.support_team_member import SupportTeamMember
@@ -16,6 +17,7 @@ __all__ = [
     "Deployment",
     "DraftReview",
     "Incident",
+    "Invoice",
     "Message",
     "Subscription",
     "SupportTeamMember",

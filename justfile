@@ -4,6 +4,18 @@ server:
     uv run alembic upgrade head
     uv run -m main
 
+# Start the existing scenario database and preserve its checkpoints.
+scenario world="world_1":
+    uv run -m app.scenarios start {{world}}
+
+# Reset the scenario database and checkpoints, seed it, then start the server.
+scenario-seed-and-run world="world_1":
+    uv run -m app.scenarios run {{world}}
+
+# Reset the scenario database and checkpoints, then seed it.
+scenario-seed world="world_1":
+    uv run -m app.scenarios seed {{world}}
+
 agent ticket="":
     uv run -m app.agents.main_agent_invocation {{ticket}}
 
@@ -12,6 +24,9 @@ eval:
 
 tests:
     uv run -m unittest discover -s tests
+
+test-worlds:
+    uv run -m unittest tests.test_world_schema tests.test_scenario_database
 
 migrate:
     uv run alembic upgrade head

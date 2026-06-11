@@ -8,9 +8,11 @@ from uuid import uuid4
 from langfuse import get_client
 from langfuse.experiment import ExperimentResult
 
-from app.agents.context import create_stub_agent_context
+from app.agents.context import create_database_agent_context
 from app.agents.main_agent import MainAgentState, graph
 from app.observability import merge_langfuse_callbacks, shutdown_langfuse
+from app.scenario_database import scenario_session_factory
+from app.scenarios import world_path
 
 DATASET_NAME = "case_1"
 EXPERIMENT_NAME = "main-agent-webhook"
@@ -38,16 +40,18 @@ async def _invoke_main_agent(input_: Any) -> dict[str, Any]:
             }
         }
     )
-    return cast(
-        dict[str, Any],
-        await asyncio.to_thread(
-            lambda: graph.invoke(
-                cast(MainAgentState, dict(input_)),
-                config=config,
-                context=create_stub_agent_context(),
+    def invoke() -> dict[str, Any]:
+        with scenario_session_factory(world_path("world_1")) as sessions:
+            return cast(
+                dict[str, Any],
+                graph.invoke(
+                    cast(MainAgentState, dict(input_)),
+                    config=config,
+                    context=create_database_agent_context(sessions),
+                ),
             )
-        ),
-    )
+
+    return await asyncio.to_thread(invoke)
 
 
 def run_experiment(

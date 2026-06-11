@@ -7,11 +7,9 @@ from app.repositories.agent_repository_protocols import (
     SerializedRow,
     TicketHistoryData,
 )
-from app.repositories.agent_repository_stubs import StubAgentRepository
 from app.repositories.draft_review_repository import (
     DatabaseDraftReviewRepository,
     DraftReviewRepository,
-    database_draft_review_repository,
 )
 from app.repositories.ticket_conversation_repository import (
     DatabaseTicketConversationRepository,
@@ -29,9 +27,7 @@ __all__ = [
     "InvoiceData",
     "DraftReviewRepository",
     "SerializedRow",
-    "StubAgentRepository",
     "TicketHistoryData",
     "TicketConversationRepository",
     "database_ticket_conversation_repository",
-    "database_draft_review_repository",
 ]
