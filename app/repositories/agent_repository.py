@@ -1,8 +1,9 @@
 from datetime import date, datetime
-from typing import Any
+from typing import TypeAlias, cast
 
 from sqlalchemy import and_, func, not_, or_, select
 from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db import SessionLocal
@@ -23,12 +24,24 @@ from app.repositories.agent_repository_protocols import (
     CustomerContextData,
     CustomerData,
     InvoiceData,
+    FilterValue,
     QueryResult,
     RepositoryWhere,
     SerializedRow,
     TicketHistoryData,
+    WhereCondition,
 )
 from app.repositories.utils.serialization import model_to_dict
+
+CustomerOwnedModel: TypeAlias = (
+    type[ApiUsageLog]
+    | type[Message]
+    | type[Subscription]
+    | type[TicketHistory]
+    | type[WebhookDeliveryLog]
+    | type[WebhookEndpoint]
+)
+QueryableCustomerModel: TypeAlias = type[WebhookDeliveryLog] | type[WebhookEndpoint]
 
 
 def _customer_to_data(customer: Customer) -> CustomerData:
@@ -59,9 +72,19 @@ def _ticket_to_data(ticket: TicketHistory) -> TicketHistoryData:
     }
 
 
+def _invoice_to_data(invoice: Invoice) -> InvoiceData:
+    return {
+        "invoice_id": invoice.invoice_id,
+        "start_date": invoice.start_date,
+        "end_date": invoice.end_date,
+        "amount": invoice.amount,
+        "refundable": invoice.refundable,
+    }
+
+
 def _all_for_customer(
     db: Session,
-    model: Any,
+    model: CustomerOwnedModel,
     customer_id: int,
     limit: int = 50,
 ) -> list[SerializedRow]:
@@ -76,7 +99,7 @@ def _all_for_customer(
 
 def _query_for_customer(
     db: Session,
-    model: Any,
+    model: QueryableCustomerModel,
     customer_id: int,
     where: RepositoryWhere | None,
     limit: int,
@@ -112,7 +135,11 @@ def _query_for_customer(
     }
 
 
-def _coerce_filter_value(model: Any, name: str, value: Any) -> Any:
+def _coerce_filter_value(
+    model: QueryableCustomerModel,
+    name: str,
+    value: FilterValue,
+) -> FilterValue:
     column_type = model.__table__.columns[name].type
     try:
         python_type = column_type.python_type
@@ -144,8 +171,8 @@ def _coerce_filter_value(model: Any, name: str, value: Any) -> Any:
 
 
 def _build_where_condition(
-    model: Any,
-    condition: dict[str, Any],
+    model: QueryableCustomerModel,
+    condition: WhereCondition,
 ) -> ColumnElement[bool]:
     name = condition["column"]
     operator = condition["operator"]
@@ -155,7 +182,7 @@ def _build_where_condition(
     if name not in model.__table__.columns:
         raise ValueError(f"Invalid {model.__name__} where column: {name}")
 
-    column = getattr(model, name)
+    column = cast(InstrumentedAttribute[object], getattr(model, name))
     if operator == "is_null":
         return column.is_(None)
     if operator == "is_not_null":
@@ -248,7 +275,7 @@ class DatabaseAgentRepository:
         db = self.session_factory()
         try:
             invoice = db.get(Invoice, invoice_id)
-            return model_to_dict(invoice) if invoice is not None else None
+            return _invoice_to_data(invoice) if invoice is not None else None
         finally:
             db.close()
 

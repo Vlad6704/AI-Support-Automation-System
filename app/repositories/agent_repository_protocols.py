@@ -1,5 +1,5 @@
-from datetime import datetime
-from typing import Any, Literal, Protocol, TypeAlias, TypedDict
+from datetime import date, datetime
+from typing import Literal, Protocol, TypedDict
 
 from app.enums import AffectedService, TicketStatus, TicketSupportability
 
@@ -36,9 +36,14 @@ class InvoiceData(TypedDict):
     refundable: bool
 
 
-SerializedValue: TypeAlias = Any
-SerializedRow: TypeAlias = dict[str, SerializedValue]
-WhereOperator: TypeAlias = Literal[
+type SerializedScalar = str | int | float | bool | None
+type SerializedValue = (
+    SerializedScalar | list[SerializedValue] | dict[str, SerializedValue]
+)
+type SerializedRow = dict[str, SerializedValue]
+type FilterScalar = SerializedScalar | date | datetime
+type FilterValue = FilterScalar | list[FilterScalar]
+type WhereOperator = Literal[
     "eq",
     "ne",
     "gt",
@@ -58,7 +63,7 @@ WhereOperator: TypeAlias = Literal[
 class WhereCondition(TypedDict):
     column: str
     operator: WhereOperator
-    value: SerializedValue
+    value: FilterValue
 
 
 class RepositoryWhere(TypedDict):
