@@ -92,6 +92,7 @@ def invoke_graph_with_langfuse(
     user_id: str | None = None,
     tags: Iterable[str] = (),
     metadata: TraceMetadata | None = None,
+    trace_id: str | None = None,
     context: Any = None,
 ) -> Any:
     langfuse = get_client()
@@ -101,6 +102,7 @@ def invoke_graph_with_langfuse(
     with langfuse.start_as_current_observation(
         as_type="span",
         name=trace_name,
+        trace_context={"trace_id": trace_id} if trace_id is not None else None,
     ) as span:
         span.update(
             input=_trace_input(input_data),

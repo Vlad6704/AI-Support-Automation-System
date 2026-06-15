@@ -11,7 +11,12 @@ from app.repositories import (
     DatabaseDraftReviewRepository,
     database_ticket_conversation_repository,
 )
-from app.services import DraftReviewService, TicketAgentService, TicketConversationService
+from app.services import (
+    AgentBusinessMetricsService,
+    DraftReviewService,
+    TicketAgentService,
+    TicketConversationService,
+)
 
 
 def get_ticket_conversation_service(
@@ -50,4 +55,16 @@ DraftReviewServiceProvider = Annotated[
 TicketAgentServiceProvider = Annotated[
     TicketAgentService,
     Depends(get_ticket_agent_service),
+]
+
+
+def get_agent_business_metrics_service(
+    db: Session = Depends(get_db),
+) -> AgentBusinessMetricsService:
+    return AgentBusinessMetricsService(db)
+
+
+AgentBusinessMetricsServiceProvider = Annotated[
+    AgentBusinessMetricsService,
+    Depends(get_agent_business_metrics_service),
 ]

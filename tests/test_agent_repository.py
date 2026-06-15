@@ -1,6 +1,11 @@
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
+from sqlalchemy import select
+
+from app.enums import AgentRunHumanReviewResult, AgentRunOutcome
+from app.models import AgentRun, TicketEvent
 from app.repositories import DatabaseAgentRepository
 from app.scenario_database import scenario_session_factory
 
@@ -17,6 +22,95 @@ class AgentRepositoryWebhookQueryTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.sessions_context.__exit__(None, None, None)
+
+    def test_records_agent_run_lifecycle_and_ticket_events(self) -> None:
+        run_id = self.repository.start_agent_run(
+            ticket_id=1,
+            trace_id="abc123",
+            agent_name="main-agent",
+            agent_version="0.1.0",
+        )
+        self.repository.finish_agent_run(
+            run_id=run_id,
+            ticket_id=1,
+            outcome=AgentRunOutcome.AUTOMATED,
+            draft_risk="low",
+            guardrail_passed=True,
+            human_review_required=False,
+            human_review_result=None,
+            edit_percentage=None,
+            event_type="response_sent",
+            event_payload={"outcome": "automated"},
+        )
+
+        with self.sessions() as session:
+            run = session.get(AgentRun, run_id)
+            events = list(
+                session.scalars(
+                    select(TicketEvent)
+                    .where(TicketEvent.ticket_id == 1)
+                    .order_by(TicketEvent.id.desc())
+                    .limit(2)
+                ).all()
+            )
+
+        self.assertIsNotNone(run)
+        if run is None:
+            self.fail("Agent run was not stored.")
+        self.assertEqual(run.outcome, AgentRunOutcome.AUTOMATED)
+        self.assertEqual(run.draft_risk, "low")
+        self.assertTrue(run.guardrail_passed)
+        self.assertIsNone(run.human_review_result)
+        self.assertIsNone(run.edit_percentage)
+        self.assertEqual(run.model_cost, None)
+        self.assertEqual(
+            {event.event_type for event in events},
+            {"agent_started", "response_sent"},
+        )
+
+    def test_records_human_review_on_awaiting_review_run(self) -> None:
+        run_id = self.repository.start_agent_run(
+            ticket_id=1,
+            trace_id="review-trace",
+            agent_name="main-agent",
+            agent_version="0.1.0",
+        )
+        self.repository.finish_agent_run(
+            run_id=run_id,
+            ticket_id=1,
+            outcome=AgentRunOutcome.AWAITING_REVIEW,
+            draft_risk="high",
+            guardrail_passed=True,
+            human_review_required=True,
+            human_review_result=None,
+            edit_percentage=None,
+            event_type="review_requested",
+            event_payload={"outcome": "awaiting_review"},
+        )
+
+        self.repository.record_agent_run_human_review(
+            ticket_id=1,
+            human_review_result=AgentRunHumanReviewResult.EDITED,
+            edit_percentage=0.25,
+        )
+
+        with self.sessions() as session:
+            run = session.get(AgentRun, run_id)
+            event = session.scalars(
+                select(TicketEvent)
+                .where(TicketEvent.ticket_id == 1)
+                .order_by(TicketEvent.id.desc())
+            ).first()
+
+        self.assertIsNotNone(run)
+        if run is None:
+            self.fail("Agent run was not stored.")
+        self.assertEqual(run.human_review_result, AgentRunHumanReviewResult.EDITED)
+        self.assertEqual(run.edit_percentage, Decimal("0.2500"))
+        self.assertIsNotNone(event)
+        if event is None:
+            self.fail("Review completion event was not stored.")
+        self.assertEqual(event.event_type, "review_completed")
 
     def test_delivery_query_filters_and_counts_within_customer(self) -> None:
         result = self.repository.get_webhook_delivery_logs(

@@ -1,4 +1,5 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from typing import TypeAlias, cast
 
 from sqlalchemy import and_, func, not_, or_, select
@@ -7,8 +8,14 @@ from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db import SessionLocal
-from app.enums import AffectedService, MessageSource
+from app.enums import (
+    AffectedService,
+    AgentRunHumanReviewResult,
+    AgentRunOutcome,
+    MessageSource,
+)
 from app.models import (
+    AgentRun,
     ApiUsageLog,
     Customer,
     Deployment,
@@ -16,6 +23,7 @@ from app.models import (
     Invoice,
     Message,
     Subscription,
+    TicketEvent,
     TicketHistory,
     WebhookDeliveryLog,
     WebhookEndpoint,
@@ -28,6 +36,7 @@ from app.repositories.agent_repository_protocols import (
     QueryResult,
     RepositoryWhere,
     SerializedRow,
+    SerializedValue,
     TicketHistoryData,
     WhereCondition,
 )
@@ -229,6 +238,112 @@ def _build_where_condition(
 class DatabaseAgentRepository:
     def __init__(self, session_factory: sessionmaker[Session] = SessionLocal) -> None:
         self.session_factory = session_factory
+
+    def start_agent_run(
+        self,
+        *,
+        ticket_id: int,
+        trace_id: str,
+        agent_name: str,
+        agent_version: str,
+    ) -> int:
+        with self.session_factory() as db:
+            run = AgentRun(
+                ticket_id=ticket_id,
+                trace_id=trace_id,
+                agent_name=agent_name,
+                agent_version=agent_version,
+            )
+            db.add(run)
+            db.flush()
+            db.add(
+                TicketEvent(
+                    ticket_id=ticket_id,
+                    event_type="agent_started",
+                    actor_type="agent",
+                    payload={"agent_run_id": run.id, "trace_id": trace_id},
+                )
+            )
+            db.commit()
+            return run.id
+
+    def finish_agent_run(
+        self,
+        *,
+        run_id: int,
+        ticket_id: int,
+        outcome: AgentRunOutcome,
+        draft_risk: str | None,
+        guardrail_passed: bool | None,
+        human_review_required: bool,
+        human_review_result: AgentRunHumanReviewResult | None,
+        edit_percentage: float | None,
+        event_type: str,
+        event_payload: dict[str, SerializedValue],
+    ) -> None:
+        with self.session_factory() as db:
+            run = db.get(AgentRun, run_id)
+            if run is None:
+                raise ValueError(f"Agent run {run_id} does not exist.")
+            if run.ticket_id != ticket_id:
+                raise ValueError(
+                    f"Agent run {run_id} does not belong to ticket {ticket_id}."
+                )
+            run.completed_at = datetime.now(timezone.utc)
+            run.outcome = outcome
+            run.draft_risk = draft_risk
+            run.guardrail_passed = guardrail_passed
+            run.human_review_required = human_review_required
+            run.human_review_result = human_review_result
+            run.edit_percentage = (
+                Decimal(str(edit_percentage)) if edit_percentage is not None else None
+            )
+            db.add(
+                TicketEvent(
+                    ticket_id=ticket_id,
+                    event_type=event_type,
+                    actor_type="agent",
+                    payload={"agent_run_id": run_id, **event_payload},
+                )
+            )
+            db.commit()
+
+    def record_agent_run_human_review(
+        self,
+        *,
+        ticket_id: int,
+        human_review_result: AgentRunHumanReviewResult,
+        edit_percentage: float,
+    ) -> None:
+        with self.session_factory() as db:
+            run = db.scalars(
+                select(AgentRun)
+                .where(
+                    AgentRun.ticket_id == ticket_id,
+                    AgentRun.outcome == AgentRunOutcome.AWAITING_REVIEW,
+                    AgentRun.human_review_result.is_(None),
+                )
+                .order_by(AgentRun.id.desc())
+            ).first()
+            if run is None:
+                raise ValueError(
+                    f"No awaiting-review agent run found for ticket {ticket_id}."
+                )
+            run.human_review_result = human_review_result
+            run.edit_percentage = Decimal(str(edit_percentage))
+            db.add(
+                TicketEvent(
+                    ticket_id=ticket_id,
+                    event_type="review_completed",
+                    actor_type="support_team",
+                    payload={
+                        "agent_run_id": run.id,
+                        "human_review_result": human_review_result.value,
+                        "edit_percentage": edit_percentage,
+                    },
+                )
+            )
+            db.commit()
 
     def get_customer_by_id(self, customer_id: int) -> CustomerData | None:
         db = self.session_factory()

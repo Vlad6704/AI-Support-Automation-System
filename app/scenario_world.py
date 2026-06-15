@@ -1,11 +1,13 @@
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
-from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from app.enums import (
     AffectedService,
+    AgentRunHumanReviewResult,
+    AgentRunOutcome,
     DraftReviewStatus,
     MessageSource,
     TicketStatus,
@@ -13,6 +15,7 @@ from app.enums import (
     WebhookDeliveryStatus,
 )
 from app.models import (
+    AgentRun,
     ApiUsageLog,
     Customer,
     Deployment,
@@ -22,11 +25,11 @@ from app.models import (
     Message,
     Subscription,
     SupportTeamMember,
+    TicketEvent,
     TicketHistory,
     WebhookDeliveryLog,
     WebhookEndpoint,
 )
-
 
 class WorldRow(BaseModel):
     model_config = ConfigDict(extra="forbid", from_attributes=True)
@@ -36,8 +39,25 @@ class ApiUsageLogData(WorldRow):
     id: int
     customer_id: int
     event_type: str
-    payload: dict[str, Any]
+    payload: dict[str, JsonValue]
     created_at: datetime
+
+
+class AgentRunData(WorldRow):
+    id: int
+    ticket_id: int
+    trace_id: str | None
+    agent_name: str
+    agent_version: str | None
+    started_at: datetime
+    completed_at: datetime | None
+    outcome: AgentRunOutcome | None
+    draft_risk: str | None
+    guardrail_passed: bool | None
+    human_review_required: bool
+    human_review_result: AgentRunHumanReviewResult | None
+    edit_percentage: Decimal | None
+    model_cost: Decimal | None
 
 
 class CustomerData(WorldRow):
@@ -142,6 +162,15 @@ class TicketHistoryData(WorldRow):
     resolution_summery: str | None
 
 
+class TicketEventData(WorldRow):
+    id: int
+    ticket_id: int
+    event_type: str
+    actor_type: str
+    created_at: datetime
+    payload: dict[str, JsonValue]
+
+
 class WebhookDeliveryLogData(WorldRow):
     id: int
     customer_id: int
@@ -167,6 +196,7 @@ class WebhookEndpointData(WorldRow):
 class WorldData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    agent_runs: list[AgentRunData]
     api_usage_logs: list[ApiUsageLogData]
     customers: list[CustomerData]
     deployments: list[DeploymentData]
@@ -176,6 +206,7 @@ class WorldData(BaseModel):
     messages: list[MessageData]
     subscriptions: list[SubscriptionData]
     support_team_members: list[SupportTeamMemberData]
+    ticket_events: list[TicketEventData]
     ticket_history: list[TicketHistoryData]
     webhook_delivery_logs: list[WebhookDeliveryLogData]
     webhook_endpoints: list[WebhookEndpointData]
@@ -188,6 +219,8 @@ WORLD_TABLES = (
     (Invoice, InvoiceData, "invoices"),
     (SupportTeamMember, SupportTeamMemberData, "support_team_members"),
     (TicketHistory, TicketHistoryData, "ticket_history"),
+    (AgentRun, AgentRunData, "agent_runs"),
+    (TicketEvent, TicketEventData, "ticket_events"),
     (WebhookEndpoint, WebhookEndpointData, "webhook_endpoints"),
     (ApiUsageLog, ApiUsageLogData, "api_usage_logs"),
     (Subscription, SubscriptionData, "subscriptions"),

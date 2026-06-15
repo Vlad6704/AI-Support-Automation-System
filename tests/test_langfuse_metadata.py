@@ -30,8 +30,14 @@ class LangfuseMetadataTests(unittest.TestCase):
             {"id": 5},
             trace_name="main-agent",
             metadata={"ticket_id": 5, "customer_id": 2},
+            trace_id="0123456789abcdef0123456789abcdef",
         )
 
+        get_client.return_value.start_as_current_observation.assert_called_once_with(
+            as_type="span",
+            name="main-agent",
+            trace_context={"trace_id": "0123456789abcdef0123456789abcdef"},
+        )
         self.assertEqual(
             span.update.call_args_list[-1].kwargs["metadata"],
             {

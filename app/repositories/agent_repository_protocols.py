@@ -1,7 +1,13 @@
 from datetime import date, datetime
 from typing import Literal, Protocol, TypedDict
 
-from app.enums import AffectedService, TicketStatus, TicketSupportability
+from app.enums import (
+    AffectedService,
+    AgentRunHumanReviewResult,
+    AgentRunOutcome,
+    TicketStatus,
+    TicketSupportability,
+)
 
 
 class CustomerData(TypedDict):
@@ -87,6 +93,38 @@ class CustomerContextData(TypedDict):
 
 
 class AgentRepository(Protocol):
+    def start_agent_run(
+        self,
+        *,
+        ticket_id: int,
+        trace_id: str,
+        agent_name: str,
+        agent_version: str,
+    ) -> int: ...
+
+    def finish_agent_run(
+        self,
+        *,
+        run_id: int,
+        ticket_id: int,
+        outcome: AgentRunOutcome,
+        draft_risk: str | None,
+        guardrail_passed: bool | None,
+        human_review_required: bool,
+        human_review_result: AgentRunHumanReviewResult | None,
+        edit_percentage: float | None,
+        event_type: str,
+        event_payload: dict[str, SerializedValue],
+    ) -> None: ...
+
+    def record_agent_run_human_review(
+        self,
+        *,
+        ticket_id: int,
+        human_review_result: AgentRunHumanReviewResult,
+        edit_percentage: float,
+    ) -> None: ...
+
     def get_customer_by_id(self, customer_id: int) -> CustomerData | None: ...
 
     def get_ticket_by_id(self, ticket_id: int) -> TicketHistoryData | None: ...

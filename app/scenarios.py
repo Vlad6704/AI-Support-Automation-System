@@ -87,6 +87,10 @@ def main() -> None:
     if args.command == "run":
         prepare_scenario(args.world, args.database)
         checkpoint_database.unlink(missing_ok=True)
+    elif args.command == "start":
+        from app.scenario_database import ensure_scenario_database_schema
+
+        ensure_scenario_database_schema(target_database)
 
     import uvicorn
 

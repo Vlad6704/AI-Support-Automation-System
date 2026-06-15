@@ -1,3 +1,4 @@
+from app.services.business_metrics import AgentBusinessMetricsService
 from app.services.exceptions import (
     AgentResponseError,
     CustomerNotFoundError,
@@ -16,6 +17,7 @@ from app.services.ticket_conversation import (
 )
 
 __all__ = [
+    "AgentBusinessMetricsService",
     "ConversationMessages",
     "AgentResponseError",
     "CustomerNotFoundError",

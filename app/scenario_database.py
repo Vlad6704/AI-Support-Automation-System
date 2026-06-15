@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import tempfile
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, inspect
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -47,6 +47,39 @@ def create_scenario_database(
     )
     try:
         seed_world(engine, load_world(world_path), reset=reset)
+    finally:
+        engine.dispose()
+    return database_url
+
+
+def ensure_scenario_database_schema(database_path: Path) -> str:
+    """Create newly added tables without resetting existing scenario data."""
+    database_url = sqlite_url(database_path)
+    engine = create_engine(
+        database_url,
+        connect_args={"check_same_thread": False},
+    )
+    try:
+        Base.metadata.create_all(engine)
+        inspector = inspect(engine)
+        mismatches: list[str] = []
+        for table in Base.metadata.sorted_tables:
+            actual_columns = {
+                str(column["name"])
+                for column in inspector.get_columns(table.name)
+            }
+            expected_columns = set(table.columns.keys())
+            if actual_columns != expected_columns:
+                mismatches.append(
+                    f"{table.name}: expected={sorted(expected_columns)}, "
+                    f"actual={sorted(actual_columns)}"
+                )
+        if mismatches:
+            raise RuntimeError(
+                "Existing scenario database schema is outdated. "
+                "Reset it with the scenario-seed-and-run command. Differences: "
+                + "; ".join(mismatches)
+            )
     finally:
         engine.dispose()
     return database_url

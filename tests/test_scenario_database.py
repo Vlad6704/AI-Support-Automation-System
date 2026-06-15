@@ -6,11 +6,13 @@ from pathlib import Path
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.models import Customer, Invoice
+from app.db import Base
+from app.models import AgentRun, Customer, Invoice, TicketEvent
 from app.repositories import DatabaseAgentRepository
 from app.scenario_database import (
     concurrent_scenario_session_factory,
     create_scenario_database,
+    ensure_scenario_database_schema,
     scenario_session_factory,
 )
 from app.scenario_world import load_world
@@ -22,6 +24,55 @@ LARGE_WORLD_PATH = PROJECT_DIR / "scenarios" / "world_2.json"
 
 
 class ScenarioDatabaseTests(unittest.TestCase):
+    def test_ensures_new_tables_without_resetting_existing_scenario_data(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = Path(directory) / "existing.db"
+            engine = create_engine(f"sqlite:///{database_path.as_posix()}")
+            try:
+                Customer.__table__.create(engine)
+                with Session(engine) as session:
+                    session.add(
+                        Customer(
+                            id=1,
+                            company_name="Preserved customer",
+                            contact_email="preserved@example.test",
+                            status="active",
+                        )
+                    )
+                    session.commit()
+            finally:
+                engine.dispose()
+
+            ensure_scenario_database_schema(database_path)
+
+            engine = create_engine(f"sqlite:///{database_path.as_posix()}")
+            try:
+                with Session(engine) as session:
+                    customer = session.get(Customer, 1)
+                    self.assertIsNotNone(customer)
+                    self.assertEqual(customer.company_name, "Preserved customer")
+                    self.assertEqual(list(session.scalars(select(AgentRun)).all()), [])
+                    self.assertEqual(list(session.scalars(select(TicketEvent)).all()), [])
+            finally:
+                engine.dispose()
+
+    def test_rejects_existing_table_with_outdated_columns(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = Path(directory) / "outdated.db"
+            engine = create_engine(f"sqlite:///{database_path.as_posix()}")
+            try:
+                Base.metadata.create_all(engine)
+                with engine.begin() as connection:
+                    connection.exec_driver_sql("DROP TABLE agent_runs")
+                    connection.exec_driver_sql(
+                        "CREATE TABLE agent_runs (id INTEGER PRIMARY KEY)"
+                    )
+            finally:
+                engine.dispose()
+
+            with self.assertRaisesRegex(RuntimeError, "schema is outdated"):
+                ensure_scenario_database_schema(database_path)
+
     def test_creates_database_from_world_and_real_repository_reads_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             database_path = Path(directory) / "world_1.db"

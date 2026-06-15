@@ -1,4 +1,5 @@
 from app.schemas.agent import ExecuteAgentRequest
+from app.schemas.business_metrics import AgentBusinessMetrics, RateMetric, RunDurationMetrics
 from app.schemas.conversations import (
     ConversationResponse,
     CreateMessageRequest,
@@ -20,6 +21,7 @@ from app.schemas.draft_reviews import (
 
 __all__ = [
     "ConversationResponse",
+    "AgentBusinessMetrics",
     "CreateMessageRequest",
     "CreateTicketRequest",
     "CreateTicketResponse",
@@ -31,6 +33,8 @@ __all__ = [
     "MessageResponse",
     "RemoteExperimentConfig",
     "RemoteExperimentRequest",
+    "RateMetric",
+    "RunDurationMetrics",
     "TicketResponse",
     "TicketSummary",
     "SubmitDraftReviewRequest",
