@@ -13,6 +13,38 @@ repositories for support data, reproducible scenario databases for local testing
 and evaluation scripts that exercise agent workflows against seeded support
 worlds.
 
+## How to Run
+
+Create a local environment file from the example and set your OpenAI API key:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Install dependencies with `uv`:
+
+```powershell
+uv sync
+```
+
+Run database migrations and start the FastAPI server:
+
+```powershell
+just server
+```
+
+The application starts at:
+
+```text
+http://127.0.0.1:8000
+```
+
+For a reproducible seeded scenario, run:
+
+```powershell
+just scenario-seed-and-run world_1
+```
+
 ## Project Structure
 
 - `app/main.py` - FastAPI application entrypoint.
