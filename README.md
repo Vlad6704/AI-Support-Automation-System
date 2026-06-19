@@ -1,5 +1,18 @@
 # AI Support Automation System
 
+## Project Description
+
+AI Support Automation System is a FastAPI-based support automation platform that uses
+LangGraph and LangChain agents to triage customer tickets, gather account and
+delivery context, and draft support responses. The current automation focuses on
+webhook-related support requests, with guardrails, risk-based human review, and
+Langfuse observability for tracing and evaluating agent behavior.
+
+The project includes a small static inbox/review interface, SQLAlchemy models and
+repositories for support data, reproducible scenario databases for local testing,
+and evaluation scripts that exercise agent workflows against seeded support
+worlds.
+
 ## Project Structure
 
 - `app/main.py` - FastAPI application entrypoint.
